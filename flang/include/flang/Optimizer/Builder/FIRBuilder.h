@@ -442,8 +442,7 @@ mlir::Value locationToLineNo(fir::FirOpBuilder &, mlir::Location, mlir::Type);
 //===--------------------------------------------------------------------===//
 
 /// Return the extended value for a component of a derived type instance given
-/// the extended value \p obj of the derived type instance and the address of
-/// the component.
+/// the address of the component.
 fir::ExtendedValue componentToExtendedValue(fir::FirOpBuilder &builder,
                                             mlir::Location loc,
                                             mlir::Value component);

@@ -380,11 +380,11 @@ public:
   /// Run the analysis on `sym`.
   void analyze(const Fortran::semantics::Symbol &sym) {
     if (symIsArray(sym)) {
-      auto isConstant = true;
+      bool isConstant = true;
       llvm::SmallVector<int64_t> lbounds;
       llvm::SmallVector<int64_t> shapes;
       llvm::SmallVector<const Fortran::semantics::ShapeSpec *> bounds;
-      for (const auto &subs : getSymShape(sym)) {
+      for (const Fortran::semantics::ShapeSpec &subs : getSymShape(sym)) {
         bounds.push_back(&subs);
         if (!isConstant)
           continue;
@@ -393,7 +393,7 @@ public:
             lbounds.push_back(*lb); // origin for this dim
             if (auto high = subs.ubound().GetExplicit()) {
               if (auto ub = Fortran::evaluate::ToInt64(*high)) {
-                auto extent = *ub - *lb + 1;
+                int64_t extent = *ub - *lb + 1;
                 shapes.push_back(extent < 0 ? 0 : extent);
                 continue;
               }
@@ -469,10 +469,9 @@ private:
   // Get the constant LEN of a CHARACTER, if it exists.
   llvm::Optional<int64_t>
   charLenConstant(const Fortran::semantics::Symbol &sym) {
-    const auto &lenParam = sym.GetType()->characterTypeSpec().length();
-    if (auto expr = lenParam.GetExplicit())
-      if (auto asInt = Fortran::evaluate::ToInt64(
-              Fortran::evaluate::AsGenericExpr(std::move(*expr))))
+    if (llvm::Optional<Fortran::semantics::SomeExpr> expr =
+            charLenVariable(sym))
+      if (std::optional<int64_t> asInt = Fortran::evaluate::ToInt64(*expr))
         return {*asInt};
     return llvm::None;
   }
@@ -480,9 +479,23 @@ private:
   // Get the `SomeExpr` that describes the CHARACTER's LEN.
   llvm::Optional<Fortran::semantics::SomeExpr>
   charLenVariable(const Fortran::semantics::Symbol &sym) {
-    const auto &lenParam = sym.GetType()->characterTypeSpec().length();
-    if (auto expr = lenParam.GetExplicit())
+    const Fortran::semantics::ParamValue &lenParam =
+        sym.GetType()->characterTypeSpec().length();
+    if (Fortran::semantics::MaybeIntExpr expr = lenParam.GetExplicit())
       return {Fortran::evaluate::AsGenericExpr(std::move(*expr))};
+    // For assumed length parameters, the length comes from the initialization
+    // expression.
+    if (sym.attrs().test(Fortran::semantics::Attr::PARAMETER))
+      if (const auto *objectDetails =
+              sym.GetUltimate()
+                  .detailsIf<Fortran::semantics::ObjectEntityDetails>())
+        if (objectDetails->init())
+          if (const auto *charExpr = std::get_if<
+                  Fortran::evaluate::Expr<Fortran::evaluate::SomeCharacter>>(
+                  &objectDetails->init()->u))
+            if (Fortran::semantics::MaybeSubscriptIntExpr expr =
+                    charExpr->LEN())
+              return {Fortran::evaluate::AsGenericExpr(std::move(*expr))};
     return llvm::None;
   }
 

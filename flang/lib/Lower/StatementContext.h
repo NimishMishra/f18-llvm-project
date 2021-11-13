@@ -46,7 +46,7 @@ public:
     if (cleanupProhibited)
       llvm::report_fatal_error("expression cleanups disallowed");
     assert(!finalized);
-    auto oldCleanup = cleanup;
+    std::function<void()> oldCleanup = cleanup;
     cleanup = [=]() {
       cuf();
       oldCleanup();

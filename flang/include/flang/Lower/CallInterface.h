@@ -386,6 +386,10 @@ getOrDeclareFunction(llvm::StringRef name,
                      const Fortran::evaluate::ProcedureDesignator &,
                      Fortran::lower::AbstractConverter &);
 
+/// Return the type of an argument that is a dummy procedure.
+mlir::Type getDummyProcedureType(const Fortran::semantics::Symbol &dummyProc,
+                                 Fortran::lower::AbstractConverter &);
+
 } // namespace Fortran::lower
 
 #endif // FORTRAN_LOWER_FIRBUILDER_H

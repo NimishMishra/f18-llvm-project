@@ -63,7 +63,7 @@ public:
   }
   template <typename B>
   constexpr BaseType<B> *getIf() const {
-    auto *ptr = std::get_if<Ref<B>>(&u);
+    const Ref<B> *ptr = std::get_if<Ref<B>>(&u);
     return ptr ? &ptr->get() : nullptr;
   }
   template <typename B>
@@ -615,7 +615,7 @@ struct FunctionLikeUnit : public ProgramUnit {
   /// This should not be called if the FunctionLikeUnit is the main program
   /// since anonymous main programs do not have a symbol.
   const semantics::Symbol &getSubprogramSymbol() const {
-    auto *symbol = entryPointList[activeEntry].first;
+    const semantics::Symbol *symbol = entryPointList[activeEntry].first;
     if (!symbol)
       llvm::report_fatal_error(
           "not inside a procedure; do not call on main program.");
@@ -768,6 +768,11 @@ ParentType *getAncestor(A &node) {
       [](Program &p) -> ParentType * { return nullptr; },
       [](auto &p) -> ParentType * { return getAncestor<ParentType>(p); }});
 }
+
+/// Call the provided \p callBack on all symbols that are referenced inside \p
+/// funit.
+void visitAllSymbols(const FunctionLikeUnit &funit,
+                     std::function<void(const semantics::Symbol &)> callBack);
 
 } // namespace Fortran::lower::pft
 

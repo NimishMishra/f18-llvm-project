@@ -76,6 +76,17 @@ struct IterationSpace {
       : inArg(from.inArg), outRes(from.outRes), element(from.element),
         indices(idxs.begin(), idxs.end()) {}
 
+  /// Create a copy of the \p from IterationSpace and prepend the \p prefix
+  /// values and append the \p suffix values, respectively.
+  explicit IterationSpace(const IterationSpace &from,
+                          llvm::ArrayRef<mlir::Value> prefix,
+                          llvm::ArrayRef<mlir::Value> suffix)
+      : inArg(from.inArg), outRes(from.outRes), element(from.element) {
+    indices.assign(prefix.begin(), prefix.end());
+    indices.append(from.indices.begin(), from.indices.end());
+    indices.append(suffix.begin(), suffix.end());
+  }
+
   bool empty() const { return indices.empty(); }
 
   /// This is the output value as it appears as an argument in the innermost
@@ -128,6 +139,8 @@ struct IterationSpace {
 
   /// Get the element as an extended value.
   fir::ExtendedValue elementExv() const { return element; }
+
+  void clearIndices() { indices.clear(); }
 
 private:
   mlir::Value inArg;
@@ -227,7 +240,7 @@ public:
   }
 
   llvm::SmallVector<FrontEndMaskExpr> getExprs() const {
-    auto maskList = getMasks()[0];
+    llvm::SmallVector<FrontEndMaskExpr> maskList = getMasks()[0];
     for (size_t i = 1, d = getMasks().size(); i < d; ++i)
       maskList.append(getMasks()[i].begin(), getMasks()[i].end());
     return maskList;
@@ -493,7 +506,7 @@ public:
       loopCleanup = fn;
       return;
     }
-    auto oldFn = loopCleanup.getValue();
+    std::function<void(fir::FirOpBuilder &)> oldFn = loopCleanup.getValue();
     loopCleanup = [=](fir::FirOpBuilder &builder) {
       oldFn(builder);
       fn(builder);

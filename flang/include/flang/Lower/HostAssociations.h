@@ -50,6 +50,11 @@ public:
   /// Return the type of the extra argument to add to each internal procedure.
   mlir::Type getArgumentType(AbstractConverter &convert);
 
+  /// Is \p symbol host associated ?
+  bool isAssociated(const Fortran::semantics::Symbol &symbol) const {
+    return symbols.contains(&symbol);
+  }
+
 private:
   /// Canonical vector of host associated symbols.
   llvm::SetVector<const Fortran::semantics::Symbol *> symbols;

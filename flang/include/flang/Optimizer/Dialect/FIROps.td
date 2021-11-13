@@ -478,7 +478,7 @@ class fir_SwitchTerminatorOp<string mnemonic, list<OpTrait> traits = []> :
 
     // The number of destination conditions that may be tested
     unsigned getNumConditions() {
-      return (*this)->getAttrOfType<mlir::ArrayAttr>(getCasesAttr()).size();
+      return getCases().size();
     }
 
     // The selector is the value being tested to determine the destination
@@ -506,6 +506,10 @@ class fir_SwitchTerminatorOp<string mnemonic, list<OpTrait> traits = []> :
         p.printSuccessorAndUseList(succ, ops.getValue());
       else
         p.printSuccessor(succ);
+    }
+
+    mlir::ArrayAttr getCases() {
+      return (*this)->getAttrOfType<mlir::ArrayAttr>(getCasesAttr());
     }
 
     unsigned targetOffsetSize();
@@ -1006,34 +1010,6 @@ def fir_EmboxProcOp : fir_Op<"emboxproc", [NoSideEffect]> {
   let printer = "::print(p, *this);";
 
   let verifier = "return ::verify(*this);";
-}
-
-def fir_UnboxOp : fir_SimpleOp<"unbox", [NoSideEffect]> {
-  let summary = "unbox the boxed value into a tuple value";
-
-  let description = [{
-    Unbox a boxed value into a result of multiple values from the box's
-    component data.  The values are, minimally, a reference to the data of the
-    entity, the byte-size of one element, the rank, the type descriptor, a set
-    of flags (packed in an integer, and an array of dimension information (of
-    size rank).
-
-    ```mlir
-      %40   = ... : !fir.box<!fir.type<T>>
-      %41:6 = fir.unbox %40 : (!fir.box<!fir.type<T>>) -> (!fir.ref<!fir.type<T>>, i32, i32, !fir.tdesc<!fir.type<T>>, i32, !fir.array<? x index>)
-    ```
-  }];
-
-  let arguments = (ins fir_BoxType:$box);
-
-  let results = (outs
-    fir_ReferenceType,  // pointer to data
-    AnyIntegerLike,     // size of a data element
-    AnyIntegerLike,     // rank of data
-    fir_TypeDescType,   // abstract type descriptor
-    AnyIntegerLike,     // attribute flags (bitfields)
-    fir_SequenceType    // dimension information (if any)
-  );
 }
 
 def fir_UnboxCharOp : fir_SimpleOp<"unboxchar", [NoSideEffect]> {
@@ -1795,11 +1771,6 @@ def fir_ExtractValueOp : fir_OneResultOp<"extract_value", [NoSideEffect]> {
   let assemblyFormat = [{
     $adt `,` $coor attr-dict `:` functional-type(operands, results)
   }];
-
-  let builders = [
-    OpBuilder<(ins "mlir::Type":$rty, "mlir::Value":$adt,
-      "llvm::ArrayRef<mlir::Value>":$vcoor)>
-  ];
 }
 
 def fir_FieldIndexOp : fir_OneResultOp<"field_index", [NoSideEffect]> {
@@ -1835,6 +1806,7 @@ def fir_FieldIndexOp : fir_OneResultOp<"field_index", [NoSideEffect]> {
     static constexpr llvm::StringRef getFieldAttrName() { return "field_id"; }
     static constexpr llvm::StringRef getTypeAttrName() { return "on_type"; }
     llvm::StringRef getFieldName() { return field_id(); }
+    llvm::SmallVector<mlir::Attribute> getAttributes();
   }];
 }
 
@@ -2044,11 +2016,6 @@ def fir_InsertValueOp : fir_OneResultOp<"insert_value", [NoSideEffect]> {
     $adt `,` $val `,` $coor attr-dict `:` functional-type(operands, results)
   }];
 
-  let builders = [
-    OpBuilder<(ins "mlir::Type":$rty, "mlir::Value":$adt, "mlir::Value":$val,
-      "llvm::ArrayRef<mlir::Value>":$vcoor)>
-  ];
-
   let hasCanonicalizer = 1;
 }
 
@@ -2079,11 +2046,6 @@ def fir_InsertOnRangeOp : fir_OneResultOp<"insert_on_range", [NoSideEffect]> {
   let assemblyFormat = [{
     $seq `,` $val `,` $coor attr-dict `:` functional-type(operands, results)
   }];
-
-  let builders = [
-    OpBuilder<(ins "mlir::Type":$rty, "mlir::Value":$adt, "mlir::Value":$val,
-      "llvm::ArrayRef<mlir::Value>":$vcoor)>
-  ];
 
   let verifier = "return ::verify(*this);";
 }

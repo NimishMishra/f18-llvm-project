@@ -770,6 +770,11 @@ private:
             markSuccessorAsNewBlock(eval);
           },
 
+          // The first executable statement after an EntryStmt is a new block.
+          [&](const parser::EntryStmt &) {
+            eval.lexicalSuccessor->isNewBlock = true;
+          },
+
           // Construct statements
           [&](const parser::AssociateStmt &s) {
             insertConstructName(s, parentConstruct);
@@ -945,7 +950,8 @@ private:
   /// also find one of the largest function results, since a single result
   /// container holds the result for all entries.
   void processEntryPoints() {
-    auto *unit = evaluationListStack.back()->front().getOwningProcedure();
+    auto *initialEval = &evaluationListStack.back()->front();
+    auto *unit = initialEval->getOwningProcedure();
     int entryCount = unit->entryPointList.size();
     if (entryCount == 1)
       return;
@@ -975,6 +981,13 @@ private:
     for (auto arg : dummyCountMap)
       if (arg.second < entryCount)
         unit->nonUniversalDummyArguments.push_back(arg.first);
+    // The first executable statement in the subprogram is preceded by a
+    // branch to the entry point, so it starts a new block.
+    if (initialEval->hasNestedEvaluations())
+      initialEval = &initialEval->getFirstNestedEvaluation();
+    else if (initialEval->isA<Fortran::parser::EntryStmt>())
+      initialEval = initialEval->lexicalSuccessor;
+    initialEval->isNewBlock = true;
   }
 
   std::unique_ptr<lower::pft::Program> pgm;
@@ -1714,4 +1727,54 @@ Fortran::lower::pft::buildFuncResultDependencyList(
          "result sym should be last");
   variableList[0].pop_back();
   return variableList[0];
+}
+
+namespace {
+/// Helper class to find all the symbols referenced in a FunctionLikeUnit.
+/// It defines a parse tree visitor doing a deep visit in all nodes with
+/// symbols (including evaluate::Expr).
+struct SymbolVisitor {
+  template <typename A>
+  bool Pre(const A &x) {
+    if constexpr (Fortran::parser::HasTypedExpr<A>::value)
+      if (const auto *expr = Fortran::semantics::GetExpr(x))
+        visitExpr(*expr);
+    return true;
+  }
+
+  bool Pre(const Fortran::parser::Name &name) {
+    if (const auto *symbol = name.symbol)
+      visitSymbol(*symbol);
+    return false;
+  }
+
+  void
+  visitExpr(const Fortran::evaluate::Expr<Fortran::evaluate::SomeType> &expr) {
+    for (const auto &symbol : Fortran::evaluate::CollectSymbols(expr))
+      visitSymbol(symbol);
+  }
+
+  void visitSymbol(const Fortran::semantics::Symbol &symbol) {
+    callBack(symbol);
+    // Visit statement function body since it will be inlined in lowering.
+    if (const auto *subprogramDetails =
+            symbol.detailsIf<Fortran::semantics::SubprogramDetails>())
+      if (const auto &maybeExpr = subprogramDetails->stmtFunction())
+        visitExpr(*maybeExpr);
+  }
+
+  template <typename A>
+  constexpr void Post(const A &) {}
+
+  const std::function<void(const Fortran::semantics::Symbol &)> &callBack;
+};
+} // namespace
+
+void Fortran::lower::pft::visitAllSymbols(
+    const Fortran::lower::pft::FunctionLikeUnit &funit,
+    const std::function<void(const Fortran::semantics::Symbol &)> callBack) {
+  SymbolVisitor visitor{callBack};
+  funit.visit([&](const auto &functionParserNode) {
+    parser::Walk(functionParserNode, visitor);
+  });
 }

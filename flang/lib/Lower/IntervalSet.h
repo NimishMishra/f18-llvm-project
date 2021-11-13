@@ -92,7 +92,7 @@ private:
   void fuse(std::size_t lo, std::size_t up, Iterator i) {
     auto j = m.upper_bound(up);
     // up < j->first
-    auto cu = std::prev(j)->second;
+    std::size_t cu = std::prev(j)->second;
     // cu < j->first
     if (cu > up)
       up = cu;

@@ -214,12 +214,12 @@ subroutine test4
   real, allocatable, target :: ally
   ! CHECK: %[[ally:.*]] = fir.alloca !fir.box<!fir.heap<f32>> {bindc_name = "ally", fir.target, uniq_name = "_QFtest4Eally"}
   ! CHECK: %[[p:.*]] = fir.alloca !fir.box<!fir.ptr<f32>> {bindc_name = "p", uniq_name = "_QFtest4Ep"}
-  ! CHECK: %[[tup:.*]] = fir.alloca tuple<!fir.ref<!fir.box<!fir.heap<f32>>>, !fir.ref<!fir.box<!fir.ptr<f32>>>>
-  ! CHECK: %[[atup:.*]] = fir.coordinate_of %[[tup]], %c0{{.*}} : (!fir.ref<tuple<!fir.ref<!fir.box<!fir.heap<f32>>>, !fir.ref<!fir.box<!fir.ptr<f32>>>>>, i32) -> !fir.llvm_ptr<!fir.ref<!fir.box<!fir.heap<f32>>>>
-  ! CHECK: fir.store %[[ally]] to %[[atup]] : !fir.llvm_ptr<!fir.ref<!fir.box<!fir.heap<f32>>>>
-  ! CHECK: %[[ptup:.*]] = fir.coordinate_of %[[tup]], %c1{{.*}} : (!fir.ref<tuple<!fir.ref<!fir.box<!fir.heap<f32>>>, !fir.ref<!fir.box<!fir.ptr<f32>>>>>, i32) -> !fir.llvm_ptr<!fir.ref<!fir.box<!fir.ptr<f32>>>>
+  ! CHECK: %[[tup:.*]] = fir.alloca tuple<!fir.ref<!fir.box<!fir.ptr<f32>>>, !fir.ref<!fir.box<!fir.heap<f32>>>>
+  ! CHECK: %[[ptup:.*]] = fir.coordinate_of %[[tup]], %c0{{.*}} : (!fir.ref<tuple<!fir.ref<!fir.box<!fir.ptr<f32>>>, !fir.ref<!fir.box<!fir.heap<f32>>>>>, i32) -> !fir.llvm_ptr<!fir.ref<!fir.box<!fir.ptr<f32>>>>
   ! CHECK: fir.store %[[p]] to %[[ptup]] : !fir.llvm_ptr<!fir.ref<!fir.box<!fir.ptr<f32>>>>
-  ! CHECK: fir.call @_QFtest4Ptest4_inner(%[[tup]]) : (!fir.ref<tuple<!fir.ref<!fir.box<!fir.heap<f32>>>, !fir.ref<!fir.box<!fir.ptr<f32>>>>>) -> ()
+  ! CHECK: %[[atup:.*]] = fir.coordinate_of %[[tup]], %c1{{.*}} : (!fir.ref<tuple<!fir.ref<!fir.box<!fir.ptr<f32>>>, !fir.ref<!fir.box<!fir.heap<f32>>>>>, i32) -> !fir.llvm_ptr<!fir.ref<!fir.box<!fir.heap<f32>>>>
+  ! CHECK: fir.store %[[ally]] to %[[atup]] : !fir.llvm_ptr<!fir.ref<!fir.box<!fir.heap<f32>>>>
+  ! CHECK: fir.call @_QFtest4Ptest4_inner(%[[tup]]) : (!fir.ref<tuple<!fir.ref<!fir.box<!fir.ptr<f32>>>, !fir.ref<!fir.box<!fir.heap<f32>>>>>) -> ()
 
   allocate(ally)
   ally = -42.0
@@ -231,12 +231,12 @@ subroutine test4
   
 contains
   ! CHECK-LABEL: func @_QFtest4Ptest4_inner(
-  ! CHECK-SAME:%[[tup:.*]]: !fir.ref<tuple<!fir.ref<!fir.box<!fir.heap<f32>>>, !fir.ref<!fir.box<!fir.ptr<f32>>>>> {fir.host_assoc}) {
+  ! CHECK-SAME:%[[tup:.*]]: !fir.ref<tuple<!fir.ref<!fir.box<!fir.ptr<f32>>>, !fir.ref<!fir.box<!fir.heap<f32>>>>> {fir.host_assoc}) {
   subroutine test4_inner
-    ! CHECK: %[[atup:.*]] = fir.coordinate_of %[[tup]], %c0{{.*}} : (!fir.ref<tuple<!fir.ref<!fir.box<!fir.heap<f32>>>, !fir.ref<!fir.box<!fir.ptr<f32>>>>>, i32) -> !fir.llvm_ptr<!fir.ref<!fir.box<!fir.heap<f32>>>>
-    ! CHECK: %[[a:.*]] = fir.load %[[atup]] : !fir.llvm_ptr<!fir.ref<!fir.box<!fir.heap<f32>>>>
-    ! CHECK: %[[ptup:.*]] = fir.coordinate_of %[[tup]], %c1{{.*}} : (!fir.ref<tuple<!fir.ref<!fir.box<!fir.heap<f32>>>, !fir.ref<!fir.box<!fir.ptr<f32>>>>>, i32) -> !fir.llvm_ptr<!fir.ref<!fir.box<!fir.ptr<f32>>>>
+    ! CHECK: %[[ptup:.*]] = fir.coordinate_of %[[tup]], %c0{{.*}} : (!fir.ref<tuple<!fir.ref<!fir.box<!fir.ptr<f32>>>, !fir.ref<!fir.box<!fir.heap<f32>>>>>, i32) -> !fir.llvm_ptr<!fir.ref<!fir.box<!fir.ptr<f32>>>>
     ! CHECK: %[[p:.*]] = fir.load %[[ptup]] : !fir.llvm_ptr<!fir.ref<!fir.box<!fir.ptr<f32>>>>
+    ! CHECK: %[[atup:.*]] = fir.coordinate_of %[[tup]], %c1{{.*}} : (!fir.ref<tuple<!fir.ref<!fir.box<!fir.ptr<f32>>>, !fir.ref<!fir.box<!fir.heap<f32>>>>>, i32) -> !fir.llvm_ptr<!fir.ref<!fir.box<!fir.heap<f32>>>>
+    ! CHECK: %[[a:.*]] = fir.load %[[atup]] : !fir.llvm_ptr<!fir.ref<!fir.box<!fir.heap<f32>>>>
     ! CHECK: %[[abox:.*]] = fir.load %[[a]] : !fir.ref<!fir.box<!fir.heap<f32>>>
     ! CHECK: %[[addr:.*]] = fir.box_addr %[[abox]] : (!fir.box<!fir.heap<f32>>) -> !fir.heap<f32>
     ! CHECK: %[[ptr:.*]] = fir.embox %[[addr]] : (!fir.heap<f32>) -> !fir.box<!fir.ptr<f32>>
@@ -256,12 +256,12 @@ subroutine test5
 
   ! CHECK: %[[ally:.*]] = fir.alloca !fir.box<!fir.heap<!fir.array<?xf32>>> {bindc_name = "ally", fir.target
   ! CHECK: %[[p:.*]] = fir.alloca !fir.box<!fir.ptr<!fir.array<?xf32>>> {bindc_name = "p"
-  ! CHECK: %[[tup:.*]] = fir.alloca tuple<!fir.ref<!fir.box<!fir.heap<!fir.array<?xf32>>>>, !fir.ref<!fir.box<!fir.ptr<!fir.array<?xf32>>>>>
-  ! CHECK: %[[atup:.*]] = fir.coordinate_of %[[tup]], %c0{{.*}} : (!fir.ref<tuple<!fir.ref<!fir.box<!fir.heap<!fir.array<?xf32>>>>, !fir.ref<!fir.box<!fir.ptr<!fir.array<?xf32>>>>>>, i32) -> !fir.llvm_ptr<!fir.ref<!fir.box<!fir.heap<!fir.array<?xf32>>>>>
-  ! CHECK: fir.store %[[ally]] to %[[atup]] : !fir.llvm_ptr<!fir.ref<!fir.box<!fir.heap<!fir.array<?xf32>>>>>
-  ! CHECK: %[[ptup:.*]] = fir.coordinate_of %[[tup]], %c1{{.*}} : (!fir.ref<tuple<!fir.ref<!fir.box<!fir.heap<!fir.array<?xf32>>>>, !fir.ref<!fir.box<!fir.ptr<!fir.array<?xf32>>>>>>, i32) -> !fir.llvm_ptr<!fir.ref<!fir.box<!fir.ptr<!fir.array<?xf32>>>>>
+  ! CHECK: %[[tup:.*]] = fir.alloca tuple<!fir.ref<!fir.box<!fir.ptr<!fir.array<?xf32>>>>, !fir.ref<!fir.box<!fir.heap<!fir.array<?xf32>>>>>
+  ! CHECK: %[[ptup:.*]] = fir.coordinate_of %[[tup]], %c0{{.*}} : (!fir.ref<tuple<!fir.ref<!fir.box<!fir.ptr<!fir.array<?xf32>>>>, !fir.ref<!fir.box<!fir.heap<!fir.array<?xf32>>>>>>, i32) -> !fir.llvm_ptr<!fir.ref<!fir.box<!fir.ptr<!fir.array<?xf32>>>>>
   ! CHECK: fir.store %[[p]] to %[[ptup]] : !fir.llvm_ptr<!fir.ref<!fir.box<!fir.ptr<!fir.array<?xf32>>>>>
-  ! CHECK: fir.call @_QFtest5Ptest5_inner(%[[tup]]) : (!fir.ref<tuple<!fir.ref<!fir.box<!fir.heap<!fir.array<?xf32>>>>, !fir.ref<!fir.box<!fir.ptr<!fir.array<?xf32>>>>>>) -> ()
+  ! CHECK: %[[atup:.*]] = fir.coordinate_of %[[tup]], %c1{{.*}} : (!fir.ref<tuple<!fir.ref<!fir.box<!fir.ptr<!fir.array<?xf32>>>>, !fir.ref<!fir.box<!fir.heap<!fir.array<?xf32>>>>>>, i32) -> !fir.llvm_ptr<!fir.ref<!fir.box<!fir.heap<!fir.array<?xf32>>>>>
+  ! CHECK: fir.store %[[ally]] to %[[atup]] : !fir.llvm_ptr<!fir.ref<!fir.box<!fir.heap<!fir.array<?xf32>>>>>
+  ! CHECK: fir.call @_QFtest5Ptest5_inner(%[[tup]]) : (!fir.ref<tuple<!fir.ref<!fir.box<!fir.ptr<!fir.array<?xf32>>>>, !fir.ref<!fir.box<!fir.heap<!fir.array<?xf32>>>>>>) -> ()
 
   allocate(ally(10))
   ally = -42.0
@@ -273,12 +273,12 @@ subroutine test5
   
 contains
   ! CHECK-LABEL: func @_QFtest5Ptest5_inner(
-  ! CHECK-SAME:%[[tup:.*]]: !fir.ref<tuple<!fir.ref<!fir.box<!fir.heap<!fir.array<?xf32>>>>, !fir.ref<!fir.box<!fir.ptr<!fir.array<?xf32>>>>>> {fir.host_assoc}) {
+  ! CHECK-SAME:%[[tup:.*]]: !fir.ref<tuple<!fir.ref<!fir.box<!fir.ptr<!fir.array<?xf32>>>>, !fir.ref<!fir.box<!fir.heap<!fir.array<?xf32>>>>>> {fir.host_assoc}) {
   subroutine test5_inner
-    ! CHECK: %[[atup:.*]] = fir.coordinate_of %[[tup]], %c0{{.*}} : (!fir.ref<tuple<!fir.ref<!fir.box<!fir.heap<!fir.array<?xf32>>>>, !fir.ref<!fir.box<!fir.ptr<!fir.array<?xf32>>>>>>, i32) -> !fir.llvm_ptr<!fir.ref<!fir.box<!fir.heap<!fir.array<?xf32>>>>>
-    ! CHECK: %[[a:.*]] = fir.load %[[atup]] : !fir.llvm_ptr<!fir.ref<!fir.box<!fir.heap<!fir.array<?xf32>>>>>
-    ! CHECK: %[[ptup:.*]] = fir.coordinate_of %[[tup]], %c1{{.*}} : (!fir.ref<tuple<!fir.ref<!fir.box<!fir.heap<!fir.array<?xf32>>>>, !fir.ref<!fir.box<!fir.ptr<!fir.array<?xf32>>>>>>, i32) -> !fir.llvm_ptr<!fir.ref<!fir.box<!fir.ptr<!fir.array<?xf32>>>>>
+    ! CHECK: %[[ptup:.*]] = fir.coordinate_of %[[tup]], %c0{{.*}} : (!fir.ref<tuple<!fir.ref<!fir.box<!fir.ptr<!fir.array<?xf32>>>>, !fir.ref<!fir.box<!fir.heap<!fir.array<?xf32>>>>>>, i32) -> !fir.llvm_ptr<!fir.ref<!fir.box<!fir.ptr<!fir.array<?xf32>>>>>
     ! CHECK: %[[p:.*]] = fir.load %[[ptup]] : !fir.llvm_ptr<!fir.ref<!fir.box<!fir.ptr<!fir.array<?xf32>>>>>
+    ! CHECK: %[[atup:.*]] = fir.coordinate_of %[[tup]], %c1{{.*}} : (!fir.ref<tuple<!fir.ref<!fir.box<!fir.ptr<!fir.array<?xf32>>>>, !fir.ref<!fir.box<!fir.heap<!fir.array<?xf32>>>>>>, i32) -> !fir.llvm_ptr<!fir.ref<!fir.box<!fir.heap<!fir.array<?xf32>>>>>
+    ! CHECK: %[[a:.*]] = fir.load %[[atup]] : !fir.llvm_ptr<!fir.ref<!fir.box<!fir.heap<!fir.array<?xf32>>>>>
     ! CHECK: %[[abox:.*]] = fir.load %[[a]] : !fir.ref<!fir.box<!fir.heap<!fir.array<?xf32>>>>
     ! CHECK-DAG: %[[adims:.*]]:3 = fir.box_dims %[[abox]], %c0{{.*}} : (!fir.box<!fir.heap<!fir.array<?xf32>>>, index) -> (index, index, index)
     ! CHECK-DAG: %[[addr:.*]] = fir.box_addr %[[abox]] : (!fir.box<!fir.heap<!fir.array<?xf32>>>) -> !fir.heap<!fir.array<?xf32>>
@@ -325,4 +325,105 @@ elemental integer function test7_inner(i)
   ! CHECK: addi %[[iload]], %[[jload]] : i32
   test7_inner = i + j
 end function
+end subroutine
+
+subroutine issue990()
+  ! Test that host symbols used in statement functions inside an internal
+  ! procedure are correctly captured from the host.
+  implicit none
+  integer :: captured
+  call bar()
+contains
+! CHECK-LABEL: func @_QFissue990Pbar(
+! CHECK-SAME: %[[tup:.*]]: !fir.ref<tuple<!fir.ptr<i32>>> {fir.host_assoc}) {
+subroutine bar()
+  integer :: stmt_func, i
+  stmt_func(i) = i + captured
+  ! CHECK: %[[tupAddr:.*]] = fir.coordinate_of %[[tup]], %c0{{.*}} : (!fir.ref<tuple<!fir.ptr<i32>>>, i32) -> !fir.ref<!fir.ptr<i32>>
+  ! CHECK: %[[addr:.*]] = fir.load %[[tupAddr]] : !fir.ref<!fir.ptr<i32>>
+  ! CHECK: %[[value:.*]] = fir.load %[[addr]] : !fir.ptr<i32>
+  ! CHECK: arith.addi %{{.*}}, %[[value]] : i32
+  print *, stmt_func(10)
+end subroutine
+end subroutine
+
+subroutine issue990b()
+  ! Test when an internal procedure uses a statement function from its host
+  ! which uses host variables that are otherwise not used by the internal
+  ! procedure.
+  implicit none
+  integer :: captured, captured_stmt_func, i
+  captured_stmt_func(i) = i + captured
+  call bar()
+contains
+! CHECK-LABEL: func @_QFissue990bPbar(
+! CHECK-SAME: %[[tup:.*]]: !fir.ref<tuple<!fir.ptr<i32>>> {fir.host_assoc}) {
+subroutine bar()
+  ! CHECK: %[[tupAddr:.*]] = fir.coordinate_of %[[tup]], %c0{{.*}} : (!fir.ref<tuple<!fir.ptr<i32>>>, i32) -> !fir.ref<!fir.ptr<i32>>
+  ! CHECK: %[[addr:.*]] = fir.load %[[tupAddr]] : !fir.ref<!fir.ptr<i32>>
+  ! CHECK: %[[value:.*]] = fir.load %[[addr]] : !fir.ptr<i32>
+  ! CHECK: arith.addi %{{.*}}, %[[value]] : i32
+  print *, captured_stmt_func(10)
+end subroutine
+end subroutine
+
+! Test capture of dummy procedure functions.
+subroutine test8(dummy_proc)
+ implicit none
+ interface
+   real function dummy_proc(x)
+    real :: x
+   end function
+ end interface
+ call bar()
+contains
+! CHECK-LABEL: func @_QFtest8Pbar(
+! CHECK-SAME: %[[tup:.*]]: !fir.ref<tuple<() -> ()>> {fir.host_assoc}) {
+subroutine bar()
+  ! CHECK: %[[tupAddr:.*]] = fir.coordinate_of %[[tup]], %c0{{.*}} : (!fir.ref<tuple<() -> ()>>, i32) -> !fir.ref<() -> ()>
+  ! CHECK: %[[dummyProc:.*]] = fir.load %[[tupAddr]] : !fir.ref<() -> ()>
+  ! CHECK: %[[dummyProcCast:.*]] = fir.convert %[[dummyProc]] : (() -> ()) -> ((!fir.ref<f32>) -> f32)
+  ! CHECK: fir.call %[[dummyProcCast]](%{{.*}}) : (!fir.ref<f32>) -> f32
+ print *, dummy_proc(42.)
+end subroutine
+end subroutine
+
+! Test capture of dummy subroutines.
+subroutine test9(dummy_proc)
+ implicit none
+ interface
+   subroutine dummy_proc()
+   end subroutine
+ end interface
+ call bar()
+contains
+! CHECK-LABEL: func @_QFtest9Pbar(
+! CHECK-SAME: %[[tup:.*]]: !fir.ref<tuple<() -> ()>> {fir.host_assoc}) {
+subroutine bar()
+  ! CHECK: %[[tupAddr:.*]] = fir.coordinate_of %[[tup]], %c0{{.*}} : (!fir.ref<tuple<() -> ()>>, i32) -> !fir.ref<() -> ()>
+  ! CHECK: %[[dummyProc:.*]] = fir.load %[[tupAddr]] : !fir.ref<() -> ()>
+  ! CHECK: fir.call %[[dummyProc]]() : () -> ()
+  call dummy_proc()
+end subroutine
+end subroutine
+
+! Test capture of namelist
+! CHECK-LABEL: func @_QPtest10(
+! CHECK-SAME: %[[i:.*]]: !fir.ref<!fir.box<!fir.ptr<!fir.array<?xi32>>>>) {
+subroutine test10(i)
+ implicit none
+ integer, pointer :: i(:)
+ namelist /a_namelist/ i
+ ! CHECK: %[[tupAddr:.*]] = fir.coordinate_of %[[tup:.*]], %c0{{.*}} : (!fir.ref<tuple<!fir.ref<!fir.box<!fir.ptr<!fir.array<?xi32>>>>>>, i32) -> !fir.llvm_ptr<!fir.ref<!fir.box<!fir.ptr<!fir.array<?xi32>>>>>
+ ! CHECK: fir.store %[[i]] to %[[tupAddr]] : !fir.llvm_ptr<!fir.ref<!fir.box<!fir.ptr<!fir.array<?xi32>>>>>
+ ! CHECK: fir.call @_QFtest10Pbar(%[[tup]]) : (!fir.ref<tuple<!fir.ref<!fir.box<!fir.ptr<!fir.array<?xi32>>>>>>) -> ()
+ call bar()
+contains
+! CHECK-LABEL: func @_QFtest10Pbar(
+! CHECK-SAME: %[[tup:.*]]: !fir.ref<tuple<!fir.ref<!fir.box<!fir.ptr<!fir.array<?xi32>>>>>> {fir.host_assoc}) {
+subroutine bar()
+  ! CHECK: %[[tupAddr:.*]] = fir.coordinate_of %[[tup]], %c0{{.*}} : (!fir.ref<tuple<!fir.ref<!fir.box<!fir.ptr<!fir.array<?xi32>>>>>>, i32) -> !fir.llvm_ptr<!fir.ref<!fir.box<!fir.ptr<!fir.array<?xi32>>>>>
+  ! CHECK: fir.load %[[tupAddr]] : !fir.llvm_ptr<!fir.ref<!fir.box<!fir.ptr<!fir.array<?xi32>>>>>
+  read (88, NML = a_namelist) 
+end subroutine
 end subroutine

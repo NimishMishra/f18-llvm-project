@@ -55,7 +55,7 @@ struct ErrorManager {
             const Fortran::lower::SomeExpr *statExpr,
             const Fortran::lower::SomeExpr *errMsgExpr) {
     Fortran::lower::StatementContext stmtCtx;
-    auto &builder = converter.getFirOpBuilder();
+    fir::FirOpBuilder &builder = converter.getFirOpBuilder();
     hasStat = builder.createBool(loc, statExpr != nullptr);
     statAddr = statExpr
                    ? fir::getBase(converter.genExprAddr(statExpr, stmtCtx, loc))
@@ -76,7 +76,8 @@ struct ErrorManager {
 
   void genStatCheck(fir::FirOpBuilder &builder, mlir::Location loc) {
     if (statValue) {
-      auto zero = builder.createIntegerConstant(loc, statValue.getType(), 0);
+      mlir::Value zero =
+          builder.createIntegerConstant(loc, statValue.getType(), 0);
       auto cmp = builder.create<mlir::arith::CmpIOp>(
           loc, mlir::arith::CmpIPredicate::eq, statValue, zero);
       auto ifOp = builder.create<fir::IfOp>(loc, cmp,
@@ -89,7 +90,7 @@ struct ErrorManager {
                   mlir::Value stat) {
     if (hasStatSpec()) {
       assert(stat && "missing stat value");
-      auto castStat = builder.createConvert(
+      mlir::Value castStat = builder.createConvert(
           loc, fir::dyn_cast_ptrEleTy(statAddr.getType()), stat);
       builder.create<fir::StoreOp>(loc, castStat, statAddr);
       statValue = stat;
@@ -117,7 +118,7 @@ static void genRuntimeSetBounds(fir::FirOpBuilder &builder, mlir::Location loc,
                                 const fir::MutableBoxValue &box,
                                 mlir::Value dimIndex, mlir::Value lowerBound,
                                 mlir::Value upperBound) {
-  auto callee =
+  mlir::FuncOp callee =
       box.isPointer()
           ? fir::runtime::getRuntimeFunc<mkRTKey(PointerSetBounds)>(loc,
                                                                     builder)
@@ -137,25 +138,25 @@ static void genRuntimeInitCharacter(fir::FirOpBuilder &builder,
                                     mlir::Location loc,
                                     const fir::MutableBoxValue &box,
                                     mlir::Value len) {
-  auto callee =
+  mlir::FuncOp callee =
       box.isPointer()
           ? fir::runtime::getRuntimeFunc<mkRTKey(PointerNullifyCharacter)>(
                 loc, builder)
           : fir::runtime::getRuntimeFunc<mkRTKey(AllocatableInitCharacter)>(
                 loc, builder);
-  auto inputTypes = callee.getType().getInputs();
+  llvm::ArrayRef<mlir::Type> inputTypes = callee.getType().getInputs();
   if (inputTypes.size() != 5)
     fir::emitFatalError(
         loc, "AllocatableInitCharacter runtime interface not as expected");
   llvm::SmallVector<mlir::Value> args;
   args.push_back(builder.createConvert(loc, inputTypes[0], box.getAddr()));
   args.push_back(builder.createConvert(loc, inputTypes[1], len));
-  auto kind = box.getEleTy().cast<fir::CharacterType>().getFKind();
+  int kind = box.getEleTy().cast<fir::CharacterType>().getFKind();
   args.push_back(builder.createIntegerConstant(loc, inputTypes[2], kind));
-  auto rank = box.rank();
+  int rank = box.rank();
   args.push_back(builder.createIntegerConstant(loc, inputTypes[3], rank));
   // TODO: coarrays
-  auto corank = 0;
+  int corank = 0;
   args.push_back(builder.createIntegerConstant(loc, inputTypes[4], corank));
   builder.create<fir::CallOp>(loc, callee, args);
 }
@@ -165,7 +166,7 @@ static mlir::Value genRuntimeAllocate(fir::FirOpBuilder &builder,
                                       mlir::Location loc,
                                       const fir::MutableBoxValue &box,
                                       ErrorManager &errorManager) {
-  auto callee =
+  mlir::FuncOp callee =
       box.isPointer()
           ? fir::runtime::getRuntimeFunc<mkRTKey(PointerAllocate)>(loc, builder)
           : fir::runtime::getRuntimeFunc<mkRTKey(AllocatableAllocate)>(loc,
@@ -185,8 +186,8 @@ static mlir::Value genRuntimeDeallocate(fir::FirOpBuilder &builder,
                                         const fir::MutableBoxValue &box,
                                         ErrorManager &errorManager) {
   // Ensure fir.box is up-to-date before passing it to deallocate runtime.
-  auto boxAddress = fir::factory::getMutableIRBox(builder, loc, box);
-  auto callee =
+  mlir::Value boxAddress = fir::factory::getMutableIRBox(builder, loc, box);
+  mlir::FuncOp callee =
       box.isPointer()
           ? fir::runtime::getRuntimeFunc<mkRTKey(PointerDeallocate)>(loc,
                                                                      builder)
@@ -208,7 +209,8 @@ static mlir::Value genRuntimeDeallocate(fir::FirOpBuilder &builder,
 /// Helper to get symbol from AllocateObject.
 static const Fortran::semantics::Symbol &
 unwrapSymbol(const Fortran::parser::AllocateObject &allocObj) {
-  const auto &lastName = Fortran::parser::GetLastName(allocObj);
+  const Fortran::parser::Name &lastName =
+      Fortran::parser::GetLastName(allocObj);
   assert(lastName.symbol);
   return *lastName.symbol;
 }
@@ -217,7 +219,8 @@ static fir::MutableBoxValue
 genMutableBoxValue(Fortran::lower::AbstractConverter &converter,
                    mlir::Location loc,
                    const Fortran::parser::AllocateObject &allocObj) {
-  const auto *expr = Fortran::semantics::GetExpr(allocObj);
+  const Fortran::semantics::SomeExpr *expr =
+      Fortran::semantics::GetExpr(allocObj);
   assert(expr && "semantic analysis failure");
   return converter.genExprMutableBox(loc, *expr);
 }
@@ -237,7 +240,7 @@ public:
     errorManager.init(converter, loc, statExpr, errMsgExpr);
     if (sourceExpr || moldExpr)
       TODO(loc, "lower MOLD/SOURCE expr in allocate");
-    auto insertPt = builder.saveInsertionPoint();
+    mlir::OpBuilder::InsertPoint insertPt = builder.saveInsertionPoint();
     for (const auto &allocation :
          std::get<std::list<Fortran::parser::Allocation>>(stmt.t))
       lowerAllocation(unwrapAllocation(allocation));
@@ -253,20 +256,20 @@ private:
                  alloc.t)
           .has_value();
     }
-    const auto &getAllocObj() const {
+    const Fortran::parser::AllocateObject &getAllocObj() const {
       return std::get<Fortran::parser::AllocateObject>(alloc.t);
     }
     const Fortran::semantics::Symbol &getSymbol() const {
       return unwrapSymbol(getAllocObj());
     }
-    const auto &getShapeSpecs() const {
+    const std::list<Fortran::parser::AllocateShapeSpec> &getShapeSpecs() const {
       return std::get<std::list<Fortran::parser::AllocateShapeSpec>>(alloc.t);
     }
   };
 
   Allocation unwrapAllocation(const Fortran::parser::Allocation &alloc) {
     const auto &allocObj = std::get<Fortran::parser::AllocateObject>(alloc.t);
-    const auto &symbol = unwrapSymbol(allocObj);
+    const Fortran::semantics::Symbol &symbol = unwrapSymbol(allocObj);
     assert(symbol.GetType());
     return Allocation{alloc, *symbol.GetType()};
   }
@@ -299,7 +302,8 @@ private:
   }
 
   void lowerAllocation(const Allocation &alloc) {
-    auto boxAddr = genMutableBoxValue(converter, loc, alloc.getAllocObj());
+    fir::MutableBoxValue boxAddr =
+        genMutableBoxValue(converter, loc, alloc.getAllocObj());
     mlir::Value backupBox;
 
     if (sourceExpr) {
@@ -312,7 +316,8 @@ private:
   }
 
   static bool lowerBoundsAreOnes(const Allocation &alloc) {
-    for (const auto &shapeSpec : alloc.getShapeSpecs())
+    for (const Fortran::parser::AllocateShapeSpec &shapeSpec :
+         alloc.getShapeSpecs())
       if (std::get<0>(shapeSpec.t))
         return false;
     return true;
@@ -330,13 +335,15 @@ private:
     llvm::SmallVector<mlir::Value> lbounds;
     llvm::SmallVector<mlir::Value> extents;
     Fortran::lower::StatementContext stmtCtx;
-    auto idxTy = builder.getIndexType();
-    auto lBoundsAreOnes = lowerBoundsAreOnes(alloc);
-    auto one = builder.createIntegerConstant(loc, idxTy, 1);
-    for (const auto &shapeSpec : alloc.getShapeSpecs()) {
+    mlir::Type idxTy = builder.getIndexType();
+    bool lBoundsAreOnes = lowerBoundsAreOnes(alloc);
+    mlir::Value one = builder.createIntegerConstant(loc, idxTy, 1);
+    for (const Fortran::parser::AllocateShapeSpec &shapeSpec :
+         alloc.getShapeSpecs()) {
       mlir::Value lb;
       if (!lBoundsAreOnes) {
-        if (const auto &lbExpr = std::get<0>(shapeSpec.t)) {
+        if (const std::optional<Fortran::parser::BoundExpr> &lbExpr =
+                std::get<0>(shapeSpec.t)) {
           lb = fir::getBase(converter.genExprValue(
               Fortran::semantics::GetExpr(*lbExpr), stmtCtx, loc));
           lb = builder.createConvert(loc, idxTy, lb);
@@ -345,11 +352,11 @@ private:
         }
         lbounds.emplace_back(lb);
       }
-      auto ub = fir::getBase(converter.genExprValue(
+      mlir::Value ub = fir::getBase(converter.genExprValue(
           Fortran::semantics::GetExpr(std::get<1>(shapeSpec.t)), stmtCtx, loc));
       ub = builder.createConvert(loc, idxTy, ub);
       if (lb) {
-        auto diff = builder.create<mlir::arith::SubIOp>(loc, ub, lb);
+        mlir::Value diff = builder.create<mlir::arith::SubIOp>(loc, ub, lb);
         extents.emplace_back(
             builder.create<mlir::arith::AddIOp>(loc, diff, one));
       } else {
@@ -375,7 +382,7 @@ private:
       // 2018 19.5.2.2). The allocation runtime needs to be given a descriptor
       // with initialized rank, types and attributes. Initialize the descriptor
       // here to ensure these constraints are fulfilled.
-      auto nullPointer = fir::factory::createUnallocatedBox(
+      mlir::Value nullPointer = fir::factory::createUnallocatedBox(
           builder, loc, box.getBoxTy(), box.nonDeferredLenParams());
       builder.create<fir::StoreOp>(loc, nullPointer, box.getAddr());
     } else {
@@ -390,24 +397,26 @@ private:
       genSetType(alloc, box);
     genSetDeferredLengthParameters(alloc, box);
     // Set bounds for arrays
-    auto idxTy = builder.getIndexType();
-    auto i32Ty = builder.getIntegerType(32);
+    mlir::Type idxTy = builder.getIndexType();
+    mlir::Type i32Ty = builder.getIntegerType(32);
     Fortran::lower::StatementContext stmtCtx;
     for (const auto &iter : llvm::enumerate(alloc.getShapeSpecs())) {
       mlir::Value lb;
       const auto &bounds = iter.value().t;
-      if (const auto &lbExpr = std::get<0>(bounds))
+      if (const std::optional<Fortran::parser::BoundExpr> &lbExpr =
+              std::get<0>(bounds))
         lb = fir::getBase(converter.genExprValue(
             Fortran::semantics::GetExpr(*lbExpr), stmtCtx, loc));
       else
         lb = builder.createIntegerConstant(loc, idxTy, 1);
-      auto ub = fir::getBase(converter.genExprValue(
+      mlir::Value ub = fir::getBase(converter.genExprValue(
           Fortran::semantics::GetExpr(std::get<1>(bounds)), stmtCtx, loc));
-      auto dimIndex = builder.createIntegerConstant(loc, i32Ty, iter.index());
+      mlir::Value dimIndex =
+          builder.createIntegerConstant(loc, i32Ty, iter.index());
       // Runtime call
       genRuntimeSetBounds(builder, loc, box, dimIndex, lb, ub);
     }
-    auto stat = genRuntimeAllocate(builder, loc, box, errorManager);
+    mlir::Value stat = genRuntimeAllocate(builder, loc, box, errorManager);
     fir::factory::syncMutableBoxFromIRBox(builder, loc, box);
     errorManager.assignStat(builder, loc, stat);
   }
@@ -415,16 +424,19 @@ private:
   /// Lower the length parameters that may be specified in the optional
   /// type specification.
   void lowerAllocateLengthParameters() {
-    const auto *typeSpec = getIfAllocateStmtTypeSpec();
+    const Fortran::semantics::DeclTypeSpec *typeSpec =
+        getIfAllocateStmtTypeSpec();
     if (!typeSpec)
       return;
-    if (const auto *derived = typeSpec->AsDerived())
+    if (const Fortran::semantics::DerivedTypeSpec *derived =
+            typeSpec->AsDerived())
       if (Fortran::semantics::CountLenParameters(*derived) > 0)
         TODO(loc, "TODO: setting derived type params in allocation");
     if (typeSpec->category() ==
         Fortran::semantics::DeclTypeSpec::Category::Character) {
-      auto lenParam = typeSpec->characterTypeSpec().length();
-      if (auto intExpr = lenParam.GetExplicit()) {
+      Fortran::semantics::ParamValue lenParam =
+          typeSpec->characterTypeSpec().length();
+      if (Fortran::semantics::MaybeIntExpr intExpr = lenParam.GetExplicit()) {
         Fortran::lower::StatementContext stmtCtx;
         Fortran::semantics::SomeExpr lenExpr{*intExpr};
         lenParams.push_back(
@@ -508,7 +520,7 @@ static void genDeallocate(fir::FirOpBuilder &builder, mlir::Location loc,
   // Use runtime calls to deallocate descriptor cases. Sync MutableBoxValue
   // with its descriptor before and after calls if needed.
   errorManager.genStatCheck(builder, loc);
-  auto stat = genRuntimeDeallocate(builder, loc, box, errorManager);
+  mlir::Value stat = genRuntimeDeallocate(builder, loc, box, errorManager);
   fir::factory::syncMutableBoxFromIRBox(builder, loc, box);
   errorManager.assignStat(builder, loc, stat);
 }
@@ -518,7 +530,7 @@ void Fortran::lower::genDeallocateStmt(
     const Fortran::parser::DeallocateStmt &stmt, mlir::Location loc) {
   const Fortran::lower::SomeExpr *statExpr{nullptr};
   const Fortran::lower::SomeExpr *errMsgExpr{nullptr};
-  for (const auto &statOrErr :
+  for (const Fortran::parser::StatOrErrmsg &statOrErr :
        std::get<std::list<Fortran::parser::StatOrErrmsg>>(stmt.t))
     std::visit(Fortran::common::visitors{
                    [&](const Fortran::parser::StatVariable &statVar) {
@@ -531,11 +543,12 @@ void Fortran::lower::genDeallocateStmt(
                statOrErr.u);
   ErrorManager errorManager;
   errorManager.init(converter, loc, statExpr, errMsgExpr);
-  auto &builder = converter.getFirOpBuilder();
-  auto insertPt = builder.saveInsertionPoint();
-  for (const auto &allocateObject :
+  fir::FirOpBuilder &builder = converter.getFirOpBuilder();
+  mlir::OpBuilder::InsertPoint insertPt = builder.saveInsertionPoint();
+  for (const Fortran::parser::AllocateObject &allocateObject :
        std::get<std::list<Fortran::parser::AllocateObject>>(stmt.t)) {
-    auto box = genMutableBoxValue(converter, loc, allocateObject);
+    fir::MutableBoxValue box =
+        genMutableBoxValue(converter, loc, allocateObject);
     genDeallocate(builder, loc, box, errorManager);
   }
   builder.restoreInsertionPoint(insertPt);
@@ -556,15 +569,15 @@ isNonContiguousArrayPointer(const Fortran::semantics::Symbol &sym) {
 /// Is this a local procedure symbol in a procedure that contains internal
 /// procedures ?
 static bool mayBeCapturedInInternalProc(const Fortran::semantics::Symbol &sym) {
-  const auto &owner = sym.owner();
-  auto kind = owner.kind();
+  const Fortran::semantics::Scope &owner = sym.owner();
+  Fortran::semantics::Scope::Kind kind = owner.kind();
   // Test if this is a procedure scope that contains a subprogram scope that is
   // not an interface.
   if (kind == Fortran::semantics::Scope::Kind::Subprogram ||
       kind == Fortran::semantics::Scope::Kind::MainProgram)
-    for (const auto &childScope : owner.children())
+    for (const Fortran::semantics::Scope &childScope : owner.children())
       if (childScope.kind() == Fortran::semantics::Scope::Kind::Subprogram)
-        if (const auto *childSym = childScope.symbol())
+        if (const Fortran::semantics::Symbol *childSym = childScope.symbol())
           if (const auto *details =
                   childSym->detailsIf<Fortran::semantics::SubprogramDetails>())
             if (!details->isInterface())
@@ -580,8 +593,8 @@ createMutableProperties(Fortran::lower::AbstractConverter &converter,
                         mlir::Location loc,
                         const Fortran::lower::pft::Variable &var,
                         mlir::ValueRange nonDeferredParams) {
-  auto &builder = converter.getFirOpBuilder();
-  const auto &sym = var.getSymbol();
+  fir::FirOpBuilder &builder = converter.getFirOpBuilder();
+  const Fortran::semantics::Symbol &sym = var.getSymbol();
   // Globals and dummies may be associated, creating local variables would
   // require keeping the values and descriptor before and after every single
   // impure calls in the current scope (not only the ones taking the variable as
@@ -600,8 +613,8 @@ createMutableProperties(Fortran::lower::AbstractConverter &converter,
       useDescForMutableBox || mayBeCapturedInInternalProc(sym))
     return {};
   fir::MutableProperties mutableProperties;
-  auto name = converter.mangleName(sym);
-  auto baseAddrTy = converter.genType(sym);
+  std::string name = converter.mangleName(sym);
+  mlir::Type baseAddrTy = converter.genType(sym);
   if (auto boxType = baseAddrTy.dyn_cast<fir::BoxType>())
     baseAddrTy = boxType.getEleTy();
   // Allocate and set a variable to hold the address.
@@ -610,13 +623,13 @@ createMutableProperties(Fortran::lower::AbstractConverter &converter,
       builder.allocateLocal(loc, baseAddrTy, name + ".addr", "",
                             /*shape=*/llvm::None, /*typeparams=*/llvm::None);
   // Allocate variables to hold lower bounds and extents.
-  auto rank = sym.Rank();
-  auto idxTy = builder.getIndexType();
+  int rank = sym.Rank();
+  mlir::Type idxTy = builder.getIndexType();
   for (decltype(rank) i = 0; i < rank; ++i) {
-    auto lboundVar =
+    mlir::Value lboundVar =
         builder.allocateLocal(loc, idxTy, name + ".lb" + std::to_string(i), "",
                               /*shape=*/llvm::None, /*typeparams=*/llvm::None);
-    auto extentVar =
+    mlir::Value extentVar =
         builder.allocateLocal(loc, idxTy, name + ".ext" + std::to_string(i), "",
                               /*shape=*/llvm::None, /*typeparams=*/llvm::None);
     mutableProperties.lbounds.emplace_back(lboundVar);
@@ -624,7 +637,7 @@ createMutableProperties(Fortran::lower::AbstractConverter &converter,
   }
 
   // Allocate variable to hold deferred length parameters.
-  auto eleTy = baseAddrTy;
+  mlir::Type eleTy = baseAddrTy;
   if (auto newTy = fir::dyn_cast_ptrEleTy(eleTy))
     eleTy = newTy;
   if (auto seqTy = eleTy.dyn_cast<fir::SequenceType>())
@@ -633,9 +646,10 @@ createMutableProperties(Fortran::lower::AbstractConverter &converter,
     if (record.getNumLenParams() != 0)
       TODO(loc, "deferred length type parameters.");
   if (fir::isa_char(eleTy) && nonDeferredParams.empty()) {
-    auto lenVar = builder.allocateLocal(loc, builder.getCharacterLengthType(),
-                                        name + ".len", "", /*shape=*/llvm::None,
-                                        /*typeparams=*/llvm::None);
+    mlir::Value lenVar =
+        builder.allocateLocal(loc, builder.getCharacterLengthType(),
+                              name + ".len", "", /*shape=*/llvm::None,
+                              /*typeparams=*/llvm::None);
     mutableProperties.deferredParams.emplace_back(lenVar);
   }
   return mutableProperties;
@@ -646,11 +660,10 @@ fir::MutableBoxValue Fortran::lower::createMutableBox(
     const Fortran::lower::pft::Variable &var, mlir::Value boxAddr,
     mlir::ValueRange nonDeferredParams) {
 
-  auto mutableProperties =
+  fir::MutableProperties mutableProperties =
       createMutableProperties(converter, loc, var, nonDeferredParams);
-  auto box =
-      fir::MutableBoxValue(boxAddr, nonDeferredParams, mutableProperties);
-  auto &builder = converter.getFirOpBuilder();
+  fir::MutableBoxValue box(boxAddr, nonDeferredParams, mutableProperties);
+  fir::FirOpBuilder &builder = converter.getFirOpBuilder();
   if (!var.isGlobal() && !Fortran::semantics::IsDummy(var.getSymbol()))
     fir::factory::disassociateMutableBox(builder, loc, box);
   return box;
@@ -671,7 +684,7 @@ void Fortran::lower::associateMutableBox(
     Fortran::lower::AbstractConverter &converter, mlir::Location loc,
     const fir::MutableBoxValue &box, const Fortran::lower::SomeExpr &source,
     mlir::ValueRange lbounds, Fortran::lower::StatementContext &stmtCtx) {
-  auto &builder = converter.getFirOpBuilder();
+  fir::FirOpBuilder &builder = converter.getFirOpBuilder();
   if (Fortran::evaluate::UnwrapExpr<Fortran::evaluate::NullPointer>(source)) {
     fir::factory::disassociateMutableBox(builder, loc, box);
     return;
@@ -680,8 +693,8 @@ void Fortran::lower::associateMutableBox(
   // Array sections can be described by fir.box without making a temp.
   // Otherwise, do not generate a fir.box to avoid having to later use a
   // fir.rebox to implement the pointer association.
-  auto rhs = isArraySectionWithoutVectorSubscript(source)
-                 ? converter.genExprBox(source, stmtCtx, loc)
-                 : converter.genExprAddr(source, stmtCtx);
+  fir::ExtendedValue rhs = isArraySectionWithoutVectorSubscript(source)
+                               ? converter.genExprBox(source, stmtCtx, loc)
+                               : converter.genExprAddr(source, stmtCtx);
   fir::factory::associateMutableBox(builder, loc, box, rhs, lbounds);
 }

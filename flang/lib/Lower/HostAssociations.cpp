@@ -12,6 +12,7 @@
 #include "flang/Evaluate/check-expression.h"
 #include "flang/Lower/AbstractConverter.h"
 #include "flang/Lower/Allocatable.h"
+#include "flang/Lower/CallInterface.h"
 #include "flang/Lower/ConvertType.h"
 #include "flang/Lower/PFTBuilder.h"
 #include "flang/Lower/Todo.h"
@@ -129,6 +130,37 @@ public:
   static mlir::Type getType(Fortran::lower::AbstractConverter &converter,
                             const Fortran::semantics::Symbol &sym) {
     return fir::PointerType::get(converter.genType(sym));
+  }
+
+  static void instantiateHostTuple(const InstantiateHostTuple &args,
+                                   Fortran::lower::AbstractConverter &converter,
+                                   const Fortran::semantics::Symbol &) {
+    auto &builder = converter.getFirOpBuilder();
+    auto typeInTuple = fir::dyn_cast_ptrEleTy(args.addrInTuple.getType());
+    assert(typeInTuple && "addrInTuple must be an address");
+    auto castBox = builder.createConvert(args.loc, typeInTuple,
+                                         fir::getBase(args.hostValue));
+    builder.create<fir::StoreOp>(args.loc, castBox, args.addrInTuple);
+  }
+
+  static void getFromTuple(const GetFromTuple &args,
+                           Fortran::lower::AbstractConverter &,
+                           const Fortran::semantics::Symbol &sym,
+                           const Fortran::lower::BoxAnalyzer &) {
+    args.symMap.addSymbol(sym, args.valueInTuple);
+  }
+};
+
+/// Class defining how dummy procedures and procedure pointers
+/// are captured in internal procedures.
+class CapturedProcedure : public CapturedSymbols<CapturedProcedure> {
+public:
+  static mlir::Type getType(Fortran::lower::AbstractConverter &converter,
+                            const Fortran::semantics::Symbol &sym) {
+    if (Fortran::semantics::IsPointer(sym))
+      TODO(converter.getCurrentLocation(),
+           "capture procedure pointer in internal procedure");
+    return Fortran::lower::getDummyProcedureType(sym, converter);
   }
 
   static void instantiateHostTuple(const InstantiateHostTuple &args,
@@ -404,6 +436,10 @@ walkCaptureCategories(T visitor, Fortran::lower::AbstractConverter &converter,
     TODO(converter.genLocation(sym.name()),
          "host associated derived type with length parameters");
   Fortran::lower::BoxAnalyzer ba;
+  // Do not analyze procedures, they may be subroutines with no types that would
+  // crash the analysis.
+  if (Fortran::semantics::IsProcedure(sym))
+    return CapturedProcedure::visit(visitor, converter, sym, ba);
   ba.analyze(sym);
   if (Fortran::evaluate::IsAllocatableOrPointer(sym))
     return CapturedAllocatableAndPointer::visit(visitor, converter, sym, ba);
