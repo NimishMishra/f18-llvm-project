@@ -12,6 +12,7 @@
 
 #include "flang/Optimizer/Dialect/FIRType.h"
 #include "flang/Optimizer/Dialect/FIRDialect.h"
+#include "mlir/Dialect/OpenMP/OpenMPDialect.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinDialect.h"
 #include "mlir/IR/Diagnostics.h"
@@ -912,11 +913,23 @@ bool fir::VectorType::isValidElementType(mlir::Type t) {
 //===----------------------------------------------------------------------===//
 // FIROpsDialect
 //===----------------------------------------------------------------------===//
-
+namespace {
+/// Model for FIR pointer like types that already provide a `getElementType`
+/// method
+template <typename T>
+struct PointerLikeModel
+    : public mlir::omp::PointerLikeType::ExternalModel<PointerLikeModel<T>, T> {
+  mlir::Type getElementType(mlir::Type pointer) const {
+    return pointer.cast<T>().getElementType();
+  }
+};
+} // end namespace
 void FIROpsDialect::registerTypes() {
   addTypes<BoxType, BoxCharType, BoxProcType, CharacterType, fir::ComplexType,
            FieldType, HeapType, fir::IntegerType, LenType, LogicalType,
            LLVMPointerType, PointerType, RealType, RecordType, ReferenceType,
            SequenceType, ShapeType, ShapeShiftType, ShiftType, SliceType,
            TypeDescType, fir::VectorType>();
+  fir::ReferenceType::attachInterface<PointerLikeModel<fir::ReferenceType>>(
+      *getContext());
 }
