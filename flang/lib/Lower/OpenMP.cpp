@@ -672,6 +672,232 @@ static void genOMP(Fortran::lower::AbstractConverter &converter,
   createBodyOfOp<omp::WsLoopOp>(wsLoopOp, converter, currentLocation, eval,
                                 &wsLoopOpClauseList, iv);
 }
+
+static mlir::omp::AtomicBinOpKindAttr
+handleOmpAtomicBinaryOperator(Fortran::lower::AbstractConverter &converter,
+                              const Fortran::parser::Expr &assignmentStmtExpr) {
+  auto &firOpBuilder = converter.getFirOpBuilder();
+  auto currentLocation = converter.getCurrentLocation();
+  mlir::omp::AtomicBinOpKindAttr atomicBinOpAttr;
+  std::visit(
+      Fortran::common::visitors{
+          [&](const Fortran::parser::Expr::Add &) {
+            atomicBinOpAttr = mlir::omp::AtomicBinOpKindAttr::get(
+                firOpBuilder.getContext(),
+                mlir::omp::AtomicBinOpKindToEnum("ADD").getValue());
+          },
+          [&](const Fortran::parser::Expr::Multiply &) {
+            atomicBinOpAttr = mlir::omp::AtomicBinOpKindAttr::get(
+                firOpBuilder.getContext(),
+                mlir::omp::AtomicBinOpKindToEnum("MUL").getValue());
+          },
+          [&](const Fortran::parser::Expr::Subtract &) {
+            atomicBinOpAttr = mlir::omp::AtomicBinOpKindAttr::get(
+                firOpBuilder.getContext(),
+                mlir::omp::AtomicBinOpKindToEnum("SUB").getValue());
+          },
+          [&](const Fortran::parser::Expr::Divide &) {
+            atomicBinOpAttr = mlir::omp::AtomicBinOpKindAttr::get(
+                firOpBuilder.getContext(),
+                mlir::omp::AtomicBinOpKindToEnum("DIV").getValue());
+          },
+          [&](const Fortran::parser::Expr::AND &) {
+            atomicBinOpAttr = mlir::omp::AtomicBinOpKindAttr::get(
+                firOpBuilder.getContext(),
+                mlir::omp::AtomicBinOpKindToEnum("AND").getValue());
+          },
+          [&](const Fortran::parser::Expr::OR &) {
+            atomicBinOpAttr = mlir::omp::AtomicBinOpKindAttr::get(
+                firOpBuilder.getContext(),
+                mlir::omp::AtomicBinOpKindToEnum("OR").getValue());
+          },
+          [&](const Fortran::parser::Expr::EQV &) {
+            atomicBinOpAttr = mlir::omp::AtomicBinOpKindAttr::get(
+                firOpBuilder.getContext(),
+                mlir::omp::AtomicBinOpKindToEnum("EQV").getValue());
+          },
+          [&](const Fortran::parser::Expr::NEQV &) {
+            atomicBinOpAttr = mlir::omp::AtomicBinOpKindAttr::get(
+                firOpBuilder.getContext(),
+                mlir::omp::AtomicBinOpKindToEnum("NEQV").getValue());
+          },
+          [&](const Fortran::common::Indirection<
+              Fortran::parser::FunctionReference> &x) {
+            const auto &procedureDesignator{
+                std::get<Fortran::parser::ProcedureDesignator>(x.value().v.t)};
+            const Fortran::parser::Name *name{
+                std::get_if<Fortran::parser::Name>(&procedureDesignator.u)};
+            if (name) {
+              if (name->source == "xor") {
+                atomicBinOpAttr = mlir::omp::AtomicBinOpKindAttr::get(
+                    firOpBuilder.getContext(),
+                    mlir::omp::AtomicBinOpKindToEnum("XOR").getValue());
+              } else if (name->source == "lshift") {
+                atomicBinOpAttr = mlir::omp::AtomicBinOpKindAttr::get(
+                    firOpBuilder.getContext(),
+                    mlir::omp::AtomicBinOpKindToEnum("SHIFTL").getValue());
+              } else if (name->source == "rshift") {
+                atomicBinOpAttr = mlir::omp::AtomicBinOpKindAttr::get(
+                    firOpBuilder.getContext(),
+                    mlir::omp::AtomicBinOpKindToEnum("SHIFTR").getValue());
+              } else if (name->source == "max") {
+                atomicBinOpAttr = mlir::omp::AtomicBinOpKindAttr::get(
+                    firOpBuilder.getContext(),
+                    mlir::omp::AtomicBinOpKindToEnum("MAX").getValue());
+              } else if (name->source == "min") {
+                atomicBinOpAttr = mlir::omp::AtomicBinOpKindAttr::get(
+                    firOpBuilder.getContext(),
+                    mlir::omp::AtomicBinOpKindToEnum("MIN").getValue());
+              }
+            }
+          },
+          [&](const auto &x) {
+            TODO(currentLocation, "Operator used in atomic update statement");
+          },
+      },
+      assignmentStmtExpr.u);
+  return atomicBinOpAttr;
+}
+
+static mlir::StringAttr handleOmpAtomicMemoryOrderClause(
+    Fortran::lower::AbstractConverter &converter,
+    const Fortran::parser::OmpMemoryOrderClause &ompMemoryOrderClause) {
+  auto &firOpBuilder = converter.getFirOpBuilder();
+  mlir::StringAttr memory_order;
+  // 'acq_rel' and 'acquire' are not valid memory order clauses under atomic
+  // update or if atomic-clause if altogether absent
+  if (std::get_if<Fortran::parser::OmpClause::Release>(
+          &ompMemoryOrderClause.v.u)) {
+    memory_order =
+        firOpBuilder.getStringAttr(omp::stringifyClauseMemoryOrderKind(
+            omp::ClauseMemoryOrderKind::release));
+  } else if (std::get_if<Fortran::parser::OmpClause::Relaxed>(
+                 &ompMemoryOrderClause.v.u)) {
+    memory_order =
+        firOpBuilder.getStringAttr(omp::stringifyClauseMemoryOrderKind(
+            omp::ClauseMemoryOrderKind::relaxed));
+  } else if (std::get_if<Fortran::parser::OmpClause::SeqCst>(
+                 &ompMemoryOrderClause.v.u)) {
+    memory_order =
+        firOpBuilder.getStringAttr(omp::stringifyClauseMemoryOrderKind(
+            omp::ClauseMemoryOrderKind::seq_cst));
+  }
+  return memory_order;
+}
+
+static void
+handleOmpAtomicUpdate(Fortran::lower::AbstractConverter &converter,
+                      Fortran::lower::pft::Evaluation &eval,
+                      const Fortran::parser::OmpAtomicUpdate &atomicUpdate) {
+  auto &firOpBuilder = converter.getFirOpBuilder();
+  auto currentLocation = converter.getCurrentLocation();
+  mlir::Value address;
+  mlir::IntegerAttr hint = firOpBuilder.getI64IntegerAttr(0);
+  mlir::StringAttr memory_order;
+  const auto &rightHandClauseList = std::get<2>(atomicUpdate.t);
+  const auto &leftHandClauseList = std::get<0>(atomicUpdate.t);
+  const auto &assignmentStmtExpr =
+      std::get<Fortran::parser::Expr>(std::get<3>(atomicUpdate.t).statement.t);
+  const auto &assignmentStmtVariable = std::get<Fortran::parser::Variable>(
+      std::get<3>(atomicUpdate.t).statement.t);
+  Fortran::lower::StatementContext stmtCtx;
+  auto value = fir::getBase(converter.genExprValue(
+      *Fortran::semantics::GetExpr(assignmentStmtExpr), stmtCtx));
+  if (auto varDesignator = std::get_if<
+          Fortran::common::Indirection<Fortran::parser::Designator>>(
+          &assignmentStmtVariable.u)) {
+    if (const auto *name = getDesignatorNameIfDataRef(varDesignator->value())) {
+      address = converter.getSymbolAddress(*name->symbol);
+    }
+  }
+  for (const auto &clause : leftHandClauseList.v) {
+    if (auto ompClause = std::get_if<Fortran::parser::OmpClause>(&clause.u)) {
+      if (auto hintClause =
+              std::get_if<Fortran::parser::OmpClause::Hint>(&ompClause->u)) {
+        const auto *expr = Fortran::semantics::GetExpr(hintClause->v);
+        hint =
+            firOpBuilder.getI64IntegerAttr(*Fortran::evaluate::ToInt64(*expr));
+      }
+    }
+    if (auto ompMemoryOrderClause =
+            std::get_if<Fortran::parser::OmpMemoryOrderClause>(&clause.u)) {
+      memory_order =
+          handleOmpAtomicMemoryOrderClause(converter, *ompMemoryOrderClause);
+    }
+  }
+
+  for (const auto &clause : rightHandClauseList.v) {
+    if (auto ompClause = std::get_if<Fortran::parser::OmpClause>(&clause.u)) {
+      if (auto hintClause =
+              std::get_if<Fortran::parser::OmpClause::Hint>(&ompClause->u)) {
+        const auto *expr = Fortran::semantics::GetExpr(hintClause->v);
+        hint =
+            firOpBuilder.getI64IntegerAttr(*Fortran::evaluate::ToInt64(*expr));
+      }
+    }
+    if (auto ompMemoryOrderClause =
+            std::get_if<Fortran::parser::OmpMemoryOrderClause>(&clause.u)) {
+      memory_order =
+          handleOmpAtomicMemoryOrderClause(converter, *ompMemoryOrderClause);
+    }
+  }
+
+  firOpBuilder.create<mlir::omp::AtomicUpdateOp>(
+      currentLocation, address, value, firOpBuilder.getUnitAttr(),
+      handleOmpAtomicBinaryOperator(converter, assignmentStmtExpr), hint,
+      memory_order);
+}
+
+static void handleOmpAtomic(Fortran::lower::AbstractConverter &converter,
+                            Fortran::lower::pft::Evaluation &eval,
+                            const Fortran::parser::OmpAtomic &atomicUpdate) {
+  auto &firOpBuilder = converter.getFirOpBuilder();
+  auto currentLocation = converter.getCurrentLocation();
+  mlir::Value address;
+  mlir::IntegerAttr hint = firOpBuilder.getI64IntegerAttr(0);
+  mlir::StringAttr memory_order;
+  const auto &clauseList =
+      std::get<Fortran::parser::OmpAtomicClauseList>(atomicUpdate.t);
+  const auto &assignmentStmtExpr = std::get<Fortran::parser::Expr>(
+      std::get<Fortran::parser::Statement<Fortran::parser::AssignmentStmt>>(
+          atomicUpdate.t)
+          .statement.t);
+  const auto &assignmentStmtVariable = std::get<Fortran::parser::Variable>(
+      std::get<Fortran::parser::Statement<Fortran::parser::AssignmentStmt>>(
+          atomicUpdate.t)
+          .statement.t);
+  Fortran::lower::StatementContext stmtCtx;
+  auto value = fir::getBase(converter.genExprValue(
+      *Fortran::semantics::GetExpr(assignmentStmtExpr), stmtCtx));
+  if (auto varDesignator = std::get_if<
+          Fortran::common::Indirection<Fortran::parser::Designator>>(
+          &assignmentStmtVariable.u)) {
+    if (const auto *name = getDesignatorNameIfDataRef(varDesignator->value())) {
+      address = converter.getSymbolAddress(*name->symbol);
+    }
+  }
+  for (const auto &clause : clauseList.v) {
+    if (auto ompClause = std::get_if<Fortran::parser::OmpClause>(&clause.u)) {
+      if (auto hintClause =
+              std::get_if<Fortran::parser::OmpClause::Hint>(&ompClause->u)) {
+        const auto *expr = Fortran::semantics::GetExpr(hintClause->v);
+        hint =
+            firOpBuilder.getI64IntegerAttr(*Fortran::evaluate::ToInt64(*expr));
+      }
+    }
+    if (auto ompMemoryOrderClause =
+            std::get_if<Fortran::parser::OmpMemoryOrderClause>(&clause.u)) {
+      memory_order =
+          handleOmpAtomicMemoryOrderClause(converter, *ompMemoryOrderClause);
+    }
+  }
+
+  firOpBuilder.create<mlir::omp::AtomicUpdateOp>(
+      currentLocation, address, value, firOpBuilder.getUnitAttr(),
+      handleOmpAtomicBinaryOperator(converter, assignmentStmtExpr), hint,
+      memory_order);
+}
+
 static void
 handleOmpAtomicWrite(Fortran::lower::AbstractConverter &converter,
                      Fortran::lower::pft::Evaluation &eval,
@@ -868,9 +1094,14 @@ genOMP(Fortran::lower::AbstractConverter &converter,
                  [&](const Fortran::parser::OmpAtomicWrite &atomicWrite) {
                    handleOmpAtomicWrite(converter, eval, atomicWrite);
                  },
+                 [&](const Fortran::parser::OmpAtomicUpdate &atomicUpdate) {
+                   handleOmpAtomicUpdate(converter, eval, atomicUpdate);
+                 },
+                 [&](const Fortran::parser::OmpAtomic &atomic) {
+                   handleOmpAtomic(converter, eval, atomic);
+                 },
                  [&](const auto &) {
-                   TODO(converter.getCurrentLocation(),
-                        "Atomic update & capture");
+                   TODO(converter.getCurrentLocation(), "Atomic capture");
                  },
              },
              atomicConstruct.u);
