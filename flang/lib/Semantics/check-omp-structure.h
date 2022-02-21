@@ -247,6 +247,9 @@ private:
       const parser::DefinedOperator::IntrinsicOperator &);
   void CheckReductionTypeList(const parser::OmpClause::Reduction &);
   void CheckMasterNesting(const parser::OpenMPBlockConstruct &x);
+  void HandleDefaultClause(const parser::OpenMPBlockConstruct &);
+  void AppendToOmpClauseList(
+      parser::OmpObjectList &, semantics::UnorderedSymbolSet &);
   void ChecksOnOrderedAsBlock();
   void CheckBarrierNesting(const parser::OpenMPSimpleStandaloneConstruct &x);
   void ChecksOnOrderedAsStandalone();

@@ -10,6 +10,7 @@
 #include "flang/Parser/parse-tree.h"
 #include "flang/Semantics/tools.h"
 #include <algorithm>
+#include <iostream>
 
 namespace Fortran::semantics {
 
@@ -761,13 +762,104 @@ void OmpStructureChecker::CheckIfDoOrderedClause(
   }
 }
 
-void OmpStructureChecker::Leave(const parser::OpenMPBlockConstruct &) {
+void OmpStructureChecker::HandleDefaultClause(
+    const parser::OpenMPBlockConstruct &blockConstruct) {
+  const auto &beginBlockDir{
+      std::get<parser::OmpBeginBlockDirective>(blockConstruct.t)};
+  const auto &clauseList{std::get<parser::OmpClauseList>(beginBlockDir.t)};
+  parser::OmpDefaultClause::Type defaultClauseType;
+  bool isDefaultClausePresent{false};
+  for (const auto &clause : clauseList.v) {
+    if (const auto defaultClause =
+            std::get_if<parser::OmpClause::Default>(&clause.u)) {
+      defaultClauseType = defaultClause->v.v;
+      isDefaultClausePresent = true;
+    }
+  }
+  if (!isDefaultClausePresent)
+    return;
+
+  // extract symbols used in the block
+  semantics::UnorderedSymbolSet enclosedSymbolSet;
+
+  const auto &block{std::get<parser::Block>(blockConstruct.t)};
+  for (const parser::ExecutionPartConstruct &executionPartConstruct : block) {
+    if (const auto executableConstruct{std::get_if<parser::ExecutableConstruct>(
+            &executionPartConstruct.u)}) {
+      if (const auto actionStmt{
+              std::get_if<parser::Statement<parser::ActionStmt>>(
+                  &executableConstruct->u)}) {
+        if (const auto assignmentStmt{
+                std::get_if<common::Indirection<parser::AssignmentStmt>>(
+                    &actionStmt->statement.u)}) {
+          // get symbols from expression
+          if (const auto *e{
+                  GetExpr(std::get<parser::Expr>(assignmentStmt->value().t))}) {
+            semantics::UnorderedSymbolSet exprSymbolSet =
+                evaluate::CollectSymbols(*e);
+            enclosedSymbolSet.insert(
+                exprSymbolSet.begin(), exprSymbolSet.end());
+          }
+
+          if (const auto *e{GetExpr(
+                  std::get<parser::Variable>(assignmentStmt->value().t))}) {
+            semantics::UnorderedSymbolSet exprSymbolSet =
+                evaluate::CollectSymbols(*e);
+            enclosedSymbolSet.insert(
+                exprSymbolSet.begin(), exprSymbolSet.end());
+          }
+        }
+      }
+    }
+  }
+
+  for (const auto &clause : clauseList.v) {
+    if (defaultClauseType == parser::OmpDefaultClause::Type::Private) {
+      if (const auto privateClause =
+              std::get_if<parser::OmpClause::Private>(&clause.u)) {
+        parser::OmpObjectList &privateClauseOperands =
+            const_cast<parser::OmpObjectList &>(privateClause->v);
+        AppendToOmpClauseList(privateClauseOperands, enclosedSymbolSet);
+      }
+    }
+  }
+}
+
+void OmpStructureChecker::AppendToOmpClauseList(
+    parser::OmpObjectList &ompObjectList,
+    semantics::UnorderedSymbolSet &symbolSet) {
+  for (const Symbol &symbol : symbolSet) {
+    bool shouldInsert{true};
+    for (auto &ompObject : ompObjectList.v) {
+      if (const auto ompObjectDesignator =
+              std::get_if<parser::Designator>(&ompObject.u)) {
+        if (const auto ompObjectDataRef =
+                std::get_if<parser::DataRef>(&ompObjectDesignator->u)) {
+          if (const auto ompObjectName =
+                  std::get_if<parser::Name>(&ompObjectDataRef->u)) {
+            if (symbol == *(ompObjectName->symbol)) {
+              shouldInsert = false;
+              break;
+            }
+          }
+        }
+      }
+    }
+    if (shouldInsert) { 
+      ompObjectList.v.push_back(parser::Name{parser::CharBlock(), &(const_cast<Symbol &>(symbol))});
+    }
+  }
+}
+
+void OmpStructureChecker::Leave(
+    const parser::OpenMPBlockConstruct &blockConstruct) {
   if (GetDirectiveNest(TargetBlockOnlyTeams)) {
     ExitDirectiveNest(TargetBlockOnlyTeams);
   }
   if (GetContext().directive == llvm::omp::Directive::OMPD_target) {
     ExitDirectiveNest(TargetNest);
   }
+  HandleDefaultClause(blockConstruct);
   dirContext_.pop_back();
 }
 
