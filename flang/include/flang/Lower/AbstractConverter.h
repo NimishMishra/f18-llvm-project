@@ -16,6 +16,7 @@
 #include "flang/Common/Fortran.h"
 #include "flang/Lower/PFTDefs.h"
 #include "flang/Optimizer/Builder/BoxValue.h"
+#include "flang/Semantics/symbol.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "llvm/ADT/ArrayRef.h"
 
@@ -92,6 +93,15 @@ public:
   createHostAssociateVarClone(const Fortran::semantics::Symbol &sym) = 0;
 
   virtual void copyHostAssociateVar(const Fortran::semantics::Symbol &sym) = 0;
+
+  /// Collect the set of symbols in an eval region
+  virtual void collectSymbolSet(
+      pft::Evaluation &eval,
+      llvm::SetVector<const Fortran::semantics::Symbol *> &symbolSet,
+      Fortran::semantics::Symbol::Flag flag) = 0;
+
+  virtual fir::ExtendedValue
+  getSymbolExtValue(const Fortran::semantics::Symbol &sym) = 0;
 
   //===--------------------------------------------------------------------===//
   // Expressions

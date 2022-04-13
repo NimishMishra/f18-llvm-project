@@ -62,21 +62,72 @@ static void createPrivateVarSyms(Fortran::lower::AbstractConverter &converter,
   }
 }
 
+static void genDefaultClause(
+    Fortran::lower::AbstractConverter &converter,
+    Fortran::lower::pft::Evaluation &eval,
+    const Fortran::parser::OmpDefaultClause::Type &ompDefaultClauseType) {
+  // fir::FirOpBuilder &firOpBuilder = converter.getFirOpBuilder();
+  // auto insPt = firOpBuilder.saveInsertionPoint();
+  // firOpBuilder.setInsertionPointToStart(firOpBuilder.getAllocaBlock());
+  llvm::SetVector<const Fortran::semantics::Symbol *> symbols;
+  if (ompDefaultClauseType == Fortran::parser::OmpDefaultClause::Type::Private)
+    converter.collectSymbolSet(eval, symbols,
+                               Fortran::semantics::Symbol::Flag::OmpPrivate);
+  else if (ompDefaultClauseType ==
+           Fortran::parser::OmpDefaultClause::Type::Firstprivate)
+    converter.collectSymbolSet(
+        eval, symbols, Fortran::semantics::Symbol::Flag::OmpFirstPrivate);
+  else
+    return;
+  for (const Fortran::semantics::Symbol *sym : symbols) {
+    if (ompDefaultClauseType ==
+        Fortran::parser::OmpDefaultClause::Type::Private) {
+      bool success = converter.createHostAssociateVarClone(*sym);
+      (void)success;
+      assert(success && "Privatization failed due to existing binding");
+    } else if (ompDefaultClauseType ==
+               Fortran::parser::OmpDefaultClause::Type::Firstprivate) {
+      converter.copyHostAssociateVar(*sym);
+    }
+  }
+  // firOpBuilder.restoreInsertionPoint(insPt);
+}
 static void privatizeVars(Fortran::lower::AbstractConverter &converter,
-                          const Fortran::parser::OmpClauseList &opClauseList) {
+                          const Fortran::parser::OmpClauseList &opClauseList,
+                          Fortran::lower::pft::Evaluation &eval) {
   fir::FirOpBuilder &firOpBuilder = converter.getFirOpBuilder();
   auto insPt = firOpBuilder.saveInsertionPoint();
   firOpBuilder.setInsertionPointToStart(firOpBuilder.getAllocaBlock());
+  Fortran::parser::OmpDefaultClause::Type ompDefaultClauseType;
   for (const Fortran::parser::OmpClause &clause : opClauseList.v) {
-    if (const auto &privateClause =
-            std::get_if<Fortran::parser::OmpClause::Private>(&clause.u)) {
-      createPrivateVarSyms(converter, privateClause);
-    } else if (const auto &firstPrivateClause =
-                   std::get_if<Fortran::parser::OmpClause::Firstprivate>(
-                       &clause.u)) {
-      createPrivateVarSyms(converter, firstPrivateClause);
+    if (const auto &defaultClause =
+            std::get_if<Fortran::parser::OmpClause::Default>(&clause.u)) {
+      const auto &ompDefaultClause{defaultClause->v};
+      ompDefaultClauseType = ompDefaultClause.v;
     }
   }
+  for (const Fortran::parser::OmpClause &clause : opClauseList.v) {
+    if (const auto &privateClause{
+            std::get_if<Fortran::parser::OmpClause::Private>(&clause.u)}) {
+      if (ompDefaultClauseType !=
+          Fortran::parser::OmpDefaultClause::Type::
+              Private) // if default clause is 'private', symbols with
+                       // OmpPrivate shall be dealt with while dealing with
+                       // default clause; hence skip privitization here.
+        createPrivateVarSyms(converter, privateClause);
+    } else if (const auto &firstPrivateClause{
+                   std::get_if<Fortran::parser::OmpClause::Firstprivate>(
+                       &clause.u)}) {
+      if (ompDefaultClauseType !=
+          Fortran::parser::OmpDefaultClause::Type::
+              Firstprivate) // if default clause is 'firstprivate', symbols with
+                            // OmpFirstPrivate shall be dealt with while dealing
+                            // with default clause; hence skip privitization
+                            // here
+        createPrivateVarSyms(converter, firstPrivateClause);
+    }
+  }
+  genDefaultClause(converter, eval, ompDefaultClauseType);
   firOpBuilder.restoreInsertionPoint(insPt);
 }
 
@@ -260,7 +311,7 @@ static void createBodyOfOp(
 
   // Handle privatization. Do not privatize if this is the outer operation.
   if (clauses && !outerCombined)
-    privatizeVars(converter, *clauses);
+    privatizeVars(converter, *clauses, eval);
 }
 
 static void genOMP(Fortran::lower::AbstractConverter &converter,

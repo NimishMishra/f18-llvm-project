@@ -312,6 +312,13 @@ public:
     return lookupSymbol(sym).getAddr();
   }
 
+  fir::ExtendedValue
+  getSymbolExtValue(const Fortran::semantics::Symbol &sym) override final {
+    Fortran::lower::SymbolBox sb = localSymbols.lookupSymbol(sym);
+    assert(sb && "symbol box not found");
+    return sb.toExtendedValue();
+  }
+
   mlir::Value impliedDoBinding(llvm::StringRef name) override final {
     mlir::Value val = localSymbols.lookupImpliedDo(name);
     if (!val)
@@ -497,6 +504,17 @@ public:
       auto loadVal = builder->create<fir::LoadOp>(loc, fir::getBase(hexv));
       builder->create<fir::StoreOp>(loc, loadVal, fir::getBase(exv));
     }
+  }
+
+  void collectSymbolSet(
+      Fortran::lower::pft::Evaluation &eval,
+      llvm::SetVector<const Fortran::semantics::Symbol *> &symbolSet,
+      Fortran::semantics::Symbol::Flag flag) override final {
+    auto addToList = [&](const Fortran::semantics::Symbol &sym) {
+      if (sym.test(flag))
+        symbolSet.insert(&sym);
+    };
+    Fortran::lower::pft::visitAllSymbols(eval, addToList);
   }
 
   mlir::Location getCurrentLocation() override final { return toLocation(); }

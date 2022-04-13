@@ -1486,6 +1486,20 @@ void OmpAttributeVisitor::Post(const parser::Name &name) {
         }
       }
     }
+    if (GetContext().defaultDSA == semantics::Symbol::Flag::OmpPrivate &&
+        !HasDataSharingAttributeObject(*name.symbol)) {
+      name.symbol = DeclarePrivateAccessEntity(
+          *name.symbol, semantics::Symbol::Flag::OmpPrivate, currScope());
+      AddToContextObjectWithDSA(
+          *name.symbol, semantics::Symbol::Flag::OmpPrivate);
+    } else if (GetContext().defaultDSA ==
+            semantics::Symbol::Flag::OmpFirstPrivate &&
+        !HasDataSharingAttributeObject(*name.symbol)) {
+      name.symbol = DeclarePrivateAccessEntity(
+          *name.symbol, semantics::Symbol::Flag::OmpFirstPrivate, currScope());
+      AddToContextObjectWithDSA(
+          *name.symbol, semantics::Symbol::Flag::OmpPrivate);
+    }
   } // within OpenMP construct
 }
 
@@ -1587,6 +1601,8 @@ void OmpAttributeVisitor::ResolveOmpObject(
                     CheckMultipleAppearances(*name, *symbol, ompFlag);
                   }
                   if (privateDataSharingAttributeFlags.test(ompFlag)) {
+                    AddDataSharingAttributeObject(
+                        common::Reference<const semantics::Symbol>(*symbol));
                     CheckPrivateDSAObject(*name, *symbol, ompFlag);
                   }
 
