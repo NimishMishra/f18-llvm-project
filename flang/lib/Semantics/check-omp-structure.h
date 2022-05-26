@@ -233,6 +233,9 @@ private:
   void CheckAtomicMemoryOrderClause(
       const parser::OmpAtomicClauseList &, const parser::OmpAtomicClauseList &);
   void CheckAtomicMemoryOrderClause(const parser::OmpAtomicClauseList &);
+  void CheckAtomicHintClause(const parser::OmpAtomicClauseList &);
+  void CheckAtomicHintClause(
+      const parser::OmpAtomicClauseList &, const parser::OmpAtomicClauseList &);
   void CheckAtomicUpdateAssignmentStmt(const parser::AssignmentStmt &);
   void CheckAtomicConstructStructure(const parser::OpenMPAtomicConstruct &);
   void CheckDistLinear(const parser::OpenMPLoopConstruct &x);

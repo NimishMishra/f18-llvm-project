@@ -10,6 +10,7 @@
 #include "flang/Parser/parse-tree.h"
 #include "flang/Semantics/tools.h"
 #include <algorithm>
+#include <iostream>
 
 namespace Fortran::semantics {
 
@@ -1488,10 +1489,31 @@ void OmpStructureChecker::CheckAtomicUpdateAssignmentStmt(
               }
             }
           },
+          [&](const parser::Expr::DefinedUnary &) {
+            context_.Say(expr.source,
+                "User defined operator not allowed on atomic construct"_err_en_US);
+          },
+          [&](const parser::Expr::DefinedBinary &) {
+            context_.Say(expr.source,
+                "User defined operator not allowed on atomic construct"_err_en_US);
+          },
           [&](const auto &x) {
             if (!IsOperatorValid(x, var)) {
               context_.Say(expr.source,
                   "Invalid operator in OpenMP ATOMIC (UPDATE) statement"_err_en_US);
+            }
+            ///////// ensuring no user-defined operator
+            const semantics::Scope &scope = context_.FindScope(expr.source);
+            for (const auto &pair : scope) {
+              const Symbol &symbol{*pair.second};
+              const auto *details{
+                  symbol.GetUltimate().detailsIf<GenericDetails>()};
+              if (details) {
+                GenericKind kind{details->kind()};
+                // can also use IsIntrinsicOperator() here as well
+                std::cout << symbol.name().NULTerminatedToString() << " "
+                          << kind.IsDefinedOperator() << std::endl;
+              }
             }
           },
       },
@@ -1542,6 +1564,65 @@ void OmpStructureChecker::CheckAtomicMemoryOrderClause(
   }
 }
 
+void OmpStructureChecker::CheckAtomicHintClause(
+    const parser::OmpAtomicClauseList &ompAtomicClauseList) {
+  int hintValue = 0;
+  for (const auto &clause : ompAtomicClauseList.v) {
+    if (const auto ompClause =
+            std::get_if<Fortran::parser::OmpClause>(&clause.u)) {
+      if (auto hintClause =
+              std::get_if<Fortran::parser::OmpClause::Hint>(&ompClause->u)) {
+        if (auto evaluatedValue{GetIntValue(hintClause->v)}) {
+          hintValue = evaluatedValue.value();
+          if (hintValue != 0x0 && hintValue != 0x1 && hintValue != 0x2 &&
+              hintValue != 0x4 && hintValue != 0x8)
+            context_.Say(clause.source,
+                "Hint clause value "
+                "is not a valid OpenMP synchronization value"_err_en_US);
+        }
+      }
+    }
+  }
+}
+
+void OmpStructureChecker::CheckAtomicHintClause(
+    const parser::OmpAtomicClauseList &leftOmpAtomicClauseList,
+    const parser::OmpAtomicClauseList &rightOmpAtomicClauseList) {
+  for (const auto &clause : leftOmpAtomicClauseList.v) {
+    if (const auto ompClause =
+            std::get_if<Fortran::parser::OmpClause>(&clause.u)) {
+      if (auto hintClause =
+              std::get_if<Fortran::parser::OmpClause::Hint>(&ompClause->u)) {
+        if (auto evaluatedValue{GetIntValue(hintClause->v)}) {
+          int hintValue = evaluatedValue.value();
+          if (hintValue != 0x0 && hintValue != 0x1 && hintValue != 0x2 &&
+              hintValue != 0x4 && hintValue != 0x8)
+            context_.Say(clause.source,
+                "Hint clause value "
+                "is not a valid OpenMP synchronization value"_err_en_US);
+        }
+      }
+    }
+  }
+
+  for (const auto &clause : rightOmpAtomicClauseList.v) {
+    if (const auto ompClause =
+            std::get_if<Fortran::parser::OmpClause>(&clause.u)) {
+      if (auto hintClause =
+              std::get_if<Fortran::parser::OmpClause::Hint>(&ompClause->u)) {
+        if (auto evaluatedValue{GetIntValue(hintClause->v)}) {
+          int hintValue = evaluatedValue.value();
+          if (hintValue != 0x0 && hintValue != 0x1 && hintValue != 0x2 &&
+              hintValue != 0x4 && hintValue != 0x8)
+            context_.Say(clause.source,
+                "Hint clause value "
+                "is not a valid OpenMP synchronization value"_err_en_US);
+        }
+      }
+    }
+  }
+}
+
 void OmpStructureChecker::Enter(const parser::OpenMPAtomicConstruct &x) {
   common::visit(
       common::visitors{
@@ -1555,6 +1636,8 @@ void OmpStructureChecker::Enter(const parser::OpenMPAtomicConstruct &x) {
                     .statement);
             CheckAtomicMemoryOrderClause(
                 std::get<parser::OmpAtomicClauseList>(atomicConstruct.t));
+            CheckAtomicHintClause(
+                std::get<parser::OmpAtomicClauseList>(atomicConstruct.t));
           },
           [&](const parser::OmpAtomicUpdate &atomicConstruct) {
             const auto &dir{std::get<parser::Verbatim>(atomicConstruct.t)};
@@ -1566,12 +1649,16 @@ void OmpStructureChecker::Enter(const parser::OpenMPAtomicConstruct &x) {
                     .statement);
             CheckAtomicMemoryOrderClause(
                 std::get<0>(atomicConstruct.t), std::get<2>(atomicConstruct.t));
+            CheckAtomicHintClause(
+                std::get<0>(atomicConstruct.t), std::get<2>(atomicConstruct.t));
           },
           [&](const auto &atomicConstruct) {
             const auto &dir{std::get<parser::Verbatim>(atomicConstruct.t)};
             PushContextAndClauseSets(
                 dir.source, llvm::omp::Directive::OMPD_atomic);
             CheckAtomicMemoryOrderClause(
+                std::get<0>(atomicConstruct.t), std::get<2>(atomicConstruct.t));
+            CheckAtomicHintClause(
                 std::get<0>(atomicConstruct.t), std::get<2>(atomicConstruct.t));
           },
       },
