@@ -25,7 +25,7 @@
 #include "mlir/Dialect/OpenMP/OpenMPDialect.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "llvm/Frontend/OpenMP/OMPConstants.h"
-
+#include <iostream>
 using namespace mlir;
 
 int64_t Fortran::lower::getCollapseValue(
@@ -40,12 +40,17 @@ int64_t Fortran::lower::getCollapseValue(
   return 1;
 }
 
-static const Fortran::parser::Name *
-getDesignatorNameIfDataRef(const Fortran::parser::Designator &designator) {
-  const auto *dataRef = std::get_if<Fortran::parser::DataRef>(&designator.u);
-  return dataRef ? std::get_if<Fortran::parser::Name>(&dataRef->u) : nullptr;
-}
-
+ static const Fortran::parser::Name *
+ getDesignatorNameIfDataRef(const Fortran::parser::Designator &designator) {
+   const auto *dataRef = std::get_if<Fortran::parser::DataRef>(&designator.u);
+  const Fortran::parser::Name *name = nullptr;
+  if(const auto *arrayEle = std::get_if<Fortran::common::Indirection<Fortran::parser::ArrayElement>>(&dataRef->u)){ 
+      name = std::get_if<Fortran::parser::Name>(&arrayEle->value().base.u);
+  }
+  else
+      name = std::get_if<Fortran::parser::Name>(&dataRef->u);
+  return name;
+ }
 static Fortran::semantics::Symbol *
 getOmpObjectSymbol(const Fortran::parser::OmpObject &ompObject) {
   Fortran::semantics::Symbol *sym = nullptr;
@@ -1540,6 +1545,8 @@ static void genOmpAtomicUpdateStatement(
   mlir::Block &block = atomicUpdateOp.getRegion().back();
   firOpBuilder.setInsertionPointToEnd(&block);
 
+  // The converter.bindSymbol() succeeds compilation but later
+  // fails with 'Assertion `detail::isPresent(Val) && "dyn_cast on a non-existent value"' failed.'
   mlir::Value result = fir::getBase(converter.genExprValue(
       *Fortran::semantics::GetExpr(assignmentStmtExpr), stmtCtx));
   // Insert the terminator: YieldOp.
