@@ -156,7 +156,14 @@ void DataSharingProcessor::cloneSymbol(const Fortran::semantics::Symbol *sym) {
   // variables) happen separately, for everything else privatize here.
   if (sym->test(Fortran::semantics::Symbol::Flag::OmpPreDetermined))
     return;
-  bool success = converter.createHostAssociateVarClone(*sym);
+  bool success{false};
+  if (const auto *commonDet =
+          sym->detailsIf<Fortran::semantics::CommonBlockDetails>()) {
+    for (const auto &mem : commonDet->objects()) {
+      success = converter.createHostAssociateVarClone(*mem);
+    }
+  } else
+    success = converter.createHostAssociateVarClone(*sym);
   (void)success;
   assert(success && "Privatization failed due to existing binding");
 }
@@ -204,9 +211,9 @@ void DataSharingProcessor::collectSymbolsForPrivatization() {
   }
 
   for (auto *ps : privatizedSymbols) {
-    if (ps->has<Fortran::semantics::CommonBlockDetails>())
-      TODO(converter.getCurrentLocation(),
-           "Common Block in privatization clause");
+    // if (ps->has<Fortran::semantics::CommonBlockDetails>())
+    // TODO(converter.getCurrentLocation(),
+    //      "Common Block in privatization clause");
   }
 
   if (hasCollapse && hasLastPrivateOp)
