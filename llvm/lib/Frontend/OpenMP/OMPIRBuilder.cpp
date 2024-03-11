@@ -5910,10 +5910,17 @@ OpenMPIRBuilder::createAtomicWrite(const LocationDescription &Loc,
   return Builder.saveIP();
 }
 
+OpenMPIRBuilder::InsertPointTy OpenMPIRBuilder::createAtomicUpdateDummy(Value * XVal, Type *XElemTy, AtomicOrdering AO ){//, AtomicUpdateCallbackTy &UpdateOp){
+   BasicBlock *CurBB = Builder.GetInsertBlock();
+   Instruction *CurBBTI = CurBB->getTerminator();
+   CurBBTI = CurBBTI ? CurBBTI : Builder.CreateUnreachable(); 
+   return Builder.saveIP();
+}
+
 OpenMPIRBuilder::InsertPointTy OpenMPIRBuilder::createAtomicUpdate(
     const LocationDescription &Loc, InsertPointTy AllocaIP, AtomicOpValue &X,
     Value *Expr, AtomicOrdering AO, AtomicRMWInst::BinOp RMWOp,
-    AtomicUpdateCallbackTy &UpdateOp, bool IsXBinopExpr) {
+    AtomicUpdateCallbackTy &UpdateOp, bool IsXBinopExpr, bool translateRegion) {
   assert(!isConflictIP(Loc.IP, AllocaIP) && "IPs must not be ambiguous");
   if (!updateToLocation(Loc))
     return Loc.IP;
@@ -5932,7 +5939,7 @@ OpenMPIRBuilder::InsertPointTy OpenMPIRBuilder::createAtomicUpdate(
   });
 
   emitAtomicUpdate(AllocaIP, X.Var, X.ElemTy, Expr, AO, RMWOp, UpdateOp,
-                   X.IsVolatile, IsXBinopExpr);
+                   X.IsVolatile, IsXBinopExpr, translateRegion);
   checkAndEmitFlushAfterAtomic(Loc, AO, AtomicKind::Update);
   return Builder.saveIP();
 }
@@ -5973,7 +5980,8 @@ Value *OpenMPIRBuilder::emitRMWOpAsInstruction(Value *Src1, Value *Src2,
 std::pair<Value *, Value *> OpenMPIRBuilder::emitAtomicUpdate(
     InsertPointTy AllocaIP, Value *X, Type *XElemTy, Value *Expr,
     AtomicOrdering AO, AtomicRMWInst::BinOp RMWOp,
-    AtomicUpdateCallbackTy &UpdateOp, bool VolatileX, bool IsXBinopExpr) {
+    AtomicUpdateCallbackTy &UpdateOp, bool VolatileX, bool IsXBinopExpr,
+    bool translateRegion) {
   // TODO: handle the case where XElemTy is not byte-sized or not a power of 2
   // or a complex datatype.
   bool emitRMWOp = false;
@@ -5995,7 +6003,7 @@ std::pair<Value *, Value *> OpenMPIRBuilder::emitAtomicUpdate(
   emitRMWOp &= XElemTy->isIntegerTy();
 
   std::pair<Value *, Value *> Res;
-  if (emitRMWOp) {
+  if (emitRMWOp && !translateRegion) {
     Res.first = Builder.CreateAtomicRMW(RMWOp, X, Expr, llvm::MaybeAlign(), AO);
     // not needed except in case of postfix captures. Generate anyway for
     // consistency with the else part. Will be removed with any DCE pass.
@@ -6005,10 +6013,8 @@ std::pair<Value *, Value *> OpenMPIRBuilder::emitAtomicUpdate(
     else
       Res.second = emitRMWOpAsInstruction(Res.first, Expr, RMWOp);
   } else {
-    IntegerType *IntCastTy =
-        IntegerType::get(M.getContext(), XElemTy->getScalarSizeInBits());
     LoadInst *OldVal =
-        Builder.CreateLoad(IntCastTy, X, X->getName() + ".atomic.load");
+        Builder.CreateLoad(XElemTy, X, X->getName() + ".atomic.load");
     OldVal->setAtomic(AO);
     // CurBB
     // |     /---\
@@ -6031,19 +6037,9 @@ std::pair<Value *, Value *> OpenMPIRBuilder::emitAtomicUpdate(
     PHI->addIncoming(OldVal, CurBB);
     bool IsIntTy = XElemTy->isIntegerTy();
     Value *OldExprVal = PHI;
-    if (!IsIntTy) {
-      if (XElemTy->isFloatingPointTy()) {
-        OldExprVal = Builder.CreateBitCast(PHI, XElemTy,
-                                           X->getName() + ".atomic.fltCast");
-      } else {
-        OldExprVal = Builder.CreateIntToPtr(PHI, XElemTy,
-                                            X->getName() + ".atomic.ptrCast");
-      }
-    }
-
     Value *Upd = UpdateOp(OldExprVal, Builder);
     Builder.CreateStore(Upd, NewAtomicAddr);
-    LoadInst *DesiredVal = Builder.CreateLoad(IntCastTy, NewAtomicAddr);
+    LoadInst *DesiredVal = Builder.CreateLoad(XElemTy, NewAtomicAddr);
     AtomicOrdering Failure =
         llvm::AtomicCmpXchgInst::getStrongestFailureOrdering(AO);
     AtomicCmpXchgInst *Result = Builder.CreateAtomicCmpXchg(
@@ -6095,7 +6091,7 @@ OpenMPIRBuilder::InsertPointTy OpenMPIRBuilder::createAtomicCapture(
   AtomicRMWInst::BinOp AtomicOp = (UpdateExpr ? RMWOp : AtomicRMWInst::Xchg);
   std::pair<Value *, Value *> Result =
       emitAtomicUpdate(AllocaIP, X.Var, X.ElemTy, Expr, AO, AtomicOp, UpdateOp,
-                       X.IsVolatile, IsXBinopExpr);
+                       X.IsVolatile, IsXBinopExpr, false);
 
   Value *CapturedVal = (IsPostfixUpdate ? Result.first : Result.second);
   Builder.CreateStore(CapturedVal, V.Var, V.IsVolatile);

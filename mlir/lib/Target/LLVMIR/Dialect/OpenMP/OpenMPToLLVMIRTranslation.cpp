@@ -179,6 +179,8 @@ static llvm::BasicBlock *convertOmpOpRegions(
     }
   }
 
+  
+
   // Insert PHI nodes in the continuation block for any values forwarded by the
   // terminators in this region.
   if (!continuationBlockPHITypes.empty())
@@ -195,6 +197,8 @@ static llvm::BasicBlock *convertOmpOpRegions(
 
   // Convert blocks one by one in topological order to ensure
   // defs are converted before uses.
+  
+  
   SetVector<Block *> blocks = getTopologicallySortedBlocks(region);
   for (Block *bb : blocks) {
     llvm::BasicBlock *llvmBB = moduleTranslation.lookupBlock(bb);
@@ -214,6 +218,7 @@ static llvm::BasicBlock *convertOmpOpRegions(
       bodyGenStatus = failure();
       return continuationBlock;
     }
+    
 
     // Special handling for `omp.yield` and `omp.terminator` (we may have more
     // than one): they return the control to the parent OpenMP dialect operation
@@ -231,6 +236,7 @@ static llvm::BasicBlock *convertOmpOpRegions(
             moduleTranslation.lookupValue(terminator->getOperand(i)), llvmBB);
     }
   }
+
   // After all blocks have been traversed and values mapped, connect the PHI
   // nodes to the results of preceding blocks.
   LLVM::detail::connectPHINodes(region, moduleTranslation);
@@ -1448,6 +1454,49 @@ convertOmpAtomicUpdate(omp::AtomicUpdateOp &opInst,
                        LLVM::ModuleTranslation &moduleTranslation) {
   llvm::OpenMPIRBuilder *ompBuilder = moduleTranslation.getOpenMPBuilder();
 
+  LogicalResult bodyGenStatus = success();
+
+
+  //////////////////////////////////////////////////////////
+  //mlir::replaceAllUsesInRegionWith(opInst.getRegion().getArgument(0), opInst.getX(), opInst.getRegion());
+
+ //auto &innerOpListDummy2 = opInst.getRegion().front().getOperations();
+  //for(Operation &innerOp : innerOpListDummy2)
+//	  innerOp.dump();
+ 
+  /* 
+  // Version 1: very basic
+  llvm::Value *XVal = moduleTranslation.lookupValue(opInst.getX());
+  llvm::Type *XElemTy = moduleTranslation.convertType( opInst.getRegion().getArgument(0).getType());
+  auto load = builder.CreateLoad(XElemTy, XVal);
+  moduleTranslation.mapValue(opInst.getRegion().getArgument(0), load); 
+  SmallVector<llvm::Value *> phis;
+  inlineConvertOmpRegions(opInst.getRegion(), "atomic.region", builder, moduleTranslation, &phis);
+  omp::YieldOp yieldop = dyn_cast<omp::YieldOp>(opInst.getRegion().front().getTerminator());
+  llvm::Value *yieldVal = moduleTranslation.lookupValue(yieldop.getResults()[0]);
+  builder.CreateStore(phis[0], XVal); 
+
+
+  // Version 2 : generates correct compare exchange
+  llvm::AtomicOrdering AO =
+      convertAtomicOrdering(opInst.getMemoryOrderVal());
+  llvm::Value *XVal = moduleTranslation.lookupValue(opInst.getX());
+  llvm::Type *XElemTy = moduleTranslation.convertType( opInst.getRegion().getArgument(0).getType());
+  llvm::AllocaInst *temp1 = builder.CreateAlloca(XElemTy);
+  llvm::AllocaInst *temp2 = builder.CreateAlloca(XElemTy);
+  llvm::StoreInst *storeInst = builder.CreateStore(XVal, temp1);
+  storeInst->setAtomic(AO);
+  auto load = builder.CreateLoad(XElemTy, temp1);
+  moduleTranslation.mapValue(opInst.getRegion().getArgument(0), load);
+  SmallVector<llvm::Value *> phis;
+  inlineConvertOmpRegions(opInst.getRegion(), "atomic.region", builder, moduleTranslation, &phis);
+  builder.CreateStore(phis[0], temp2);
+
+  llvm::AtomicOrdering Failure = llvm::AtomicCmpXchgInst::getStrongestFailureOrdering(AO);
+  builder.CreateAtomicCmpXchg(XVal, temp1, temp2, llvm::MaybeAlign(), AO, Failure);
+*/
+
+
   // Convert values and types.
   auto &innerOpList = opInst.getRegion().front().getOperations();
   bool isRegionArgUsed{false}, isXBinopExpr{false};
@@ -1468,11 +1517,12 @@ convertOmpAtomicUpdate(omp::AtomicUpdateOp &opInst,
       break;
     }
   }
-  if (!isRegionArgUsed)
-    return opInst.emitError("no atomic update operation with region argument"
-                            " as operand found inside atomic.update region");
+  //if (!isRegionArgUsed)
+  //  return opInst.emitError("no atomic update operation with region argument"
+  //                          " as operand found inside atomic.update region");
 
   llvm::Value *llvmExpr = moduleTranslation.lookupValue(mlirExpr);
+  
   llvm::Value *llvmX = moduleTranslation.lookupValue(opInst.getX());
   llvm::Type *llvmXElementType = moduleTranslation.convertType(
       opInst.getRegion().getArgument(0).getType());
@@ -1508,7 +1558,7 @@ convertOmpAtomicUpdate(omp::AtomicUpdateOp &opInst,
   llvm::OpenMPIRBuilder::LocationDescription ompLoc(builder);
   builder.restoreIP(ompBuilder->createAtomicUpdate(
       ompLoc, allocaIP, llvmAtomicX, llvmExpr, atomicOrdering, binop, updateFn,
-      isXBinopExpr));
+      isXBinopExpr, true));
   return updateGenStatus;
 }
 

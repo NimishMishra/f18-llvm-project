@@ -2423,7 +2423,7 @@ private:
   emitAtomicUpdate(InsertPointTy AllocaIP, Value *X, Type *XElemTy, Value *Expr,
                    AtomicOrdering AO, AtomicRMWInst::BinOp RMWOp,
                    AtomicUpdateCallbackTy &UpdateOp, bool VolatileX,
-                   bool IsXBinopExpr);
+                   bool IsXBinopExpr, bool translateRegion);
 
   /// Emit the binary op. described by \p RMWOp, using \p Src1 and \p Src2 .
   ///
@@ -2492,8 +2492,10 @@ public:
                                    Value *Expr, AtomicOrdering AO,
                                    AtomicRMWInst::BinOp RMWOp,
                                    AtomicUpdateCallbackTy &UpdateOp,
-                                   bool IsXBinopExpr);
+                                   bool IsXBinopExpr, bool translateRegion);
 
+  InsertPointTy createAtomicUpdateDummy(Value *XVal, Type *XElemTy,
+				   AtomicOrdering AO); //, AtomicUpdateCallbackTy &UpdateOp);
   /// Emit atomic update for constructs: --- Only Scalar data types
   /// V = X; X = X BinOp Expr ,
   /// X = X BinOp Expr; V = X,
