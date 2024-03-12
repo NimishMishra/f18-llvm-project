@@ -1441,15 +1441,51 @@ llvm::AtomicRMWInst::BinOp convertBinOpToAtomic(Operation &op) {
       .Default(llvm::AtomicRMWInst::BinOp::BAD_BINOP);
 }
 
+/// Convert an OpenMP atomic update operation that has multiple instructions
+// TODO: Emit __atomic_load and __atomic_compare_exchange calls here.
+static LogicalResult
+convertNonScalarAtomicUpdate(omp::AtomicUpdateOp &opInst,
+                             llvm::IRBuilderBase &builder,
+                             LLVM::ModuleTranslation &moduleTranslation) {
+  using InsertPointTy = llvm::OpenMPIRBuilder::InsertPointTy;
+  LogicalResult bodyGenStatus = success();
+  llvm::Value *XVal = moduleTranslation.lookupValue(opInst.getX());
+  llvm::Type *XElemTy = moduleTranslation.convertType(
+      opInst.getRegion().getArgument(0).getType());
+  llvm::Value *Res = nullptr;
+  auto bodyGenCB = [&](InsertPointTy allocaIP, InsertPointTy codeGenIP) {
+    auto &region = opInst.getRegion();
+    builder.restoreIP(codeGenIP);
+    auto load = builder.CreateLoad(XElemTy, XVal);
+    moduleTranslation.mapValue(region.getArgument(0), load);
+    SmallVector<llvm::Value *> phis;
+    bodyGenStatus = inlineConvertOmpRegions(region, "omp.critical.region",
+                                            builder, moduleTranslation, &phis);
+    // builder.CreateStore(yieldVal, XVal);
+    Res = phis[0];
+  };
+  auto finiCB = [&](InsertPointTy codeGenIP) {
+    builder.restoreIP(codeGenIP);
+    builder.CreateStore(Res, XVal);
+  };
+  llvm::OpenMPIRBuilder::LocationDescription ompLocation(builder);
+  builder.restoreIP(moduleTranslation.getOpenMPBuilder()->createCritical(
+      ompLocation, bodyGenCB, finiCB, "", nullptr));
+
+  return success();
+}
+
 /// Converts an OpenMP atomic update operation using OpenMPIRBuilder.
 static LogicalResult
 convertOmpAtomicUpdate(omp::AtomicUpdateOp &opInst,
                        llvm::IRBuilderBase &builder,
                        LLVM::ModuleTranslation &moduleTranslation) {
   llvm::OpenMPIRBuilder *ompBuilder = moduleTranslation.getOpenMPBuilder();
-
   // Convert values and types.
   auto &innerOpList = opInst.getRegion().front().getOperations();
+  if (innerOpList.size() > 2)
+    return convertNonScalarAtomicUpdate(opInst, builder, moduleTranslation);
+
   bool isRegionArgUsed{false}, isXBinopExpr{false};
   llvm::AtomicRMWInst::BinOp binop;
   mlir::Value mlirExpr;
