@@ -1,0 +1,147 @@
+Program -> ProgramUnit -> Module
+| ModuleStmt -> Name = 'overload_asterisk'
+| SpecificationPart
+| | ImplicitPart -> ImplicitPartStmt -> ImplicitStmt -> 
+| | DeclarationConstruct -> SpecificationConstruct -> OtherSpecificationStmt -> AccessStmt
+| | | AccessSpec -> Kind = Private
+| | DeclarationConstruct -> SpecificationConstruct -> OtherSpecificationStmt -> AccessStmt
+| | | AccessSpec -> Kind = Public
+| | | AccessId -> GenericSpec -> DefinedOperator -> IntrinsicOperator = Multiply
+| | DeclarationConstruct -> SpecificationConstruct -> InterfaceBlock
+| | | InterfaceStmt -> GenericSpec -> DefinedOperator -> IntrinsicOperator = Multiply
+| | | InterfaceSpecification -> ProcedureStmt
+| | | | Kind = ModuleProcedure
+| | | | Name = 'logical_and'
+| | | EndInterfaceStmt -> 
+| ModuleSubprogramPart
+| | ContainsStmt
+| | ModuleSubprogram -> FunctionSubprogram
+| | | FunctionStmt
+| | | | PrefixSpec -> Pure
+| | | | PrefixSpec -> DeclarationTypeSpec -> IntrinsicTypeSpec -> Logical
+| | | | Name = 'logical_and'
+| | | | Name = 'log1'
+| | | | Name = 'log2'
+| | | SpecificationPart
+| | | | ImplicitPart -> 
+| | | | DeclarationConstruct -> SpecificationConstruct -> TypeDeclarationStmt
+| | | | | DeclarationTypeSpec -> IntrinsicTypeSpec -> Logical
+| | | | | AttrSpec -> IntentSpec -> Intent = In
+| | | | | EntityDecl
+| | | | | | Name = 'log1'
+| | | | | EntityDecl
+| | | | | | Name = 'log2'
+| | | ExecutionPart -> Block
+| | | | ExecutionPartConstruct -> ExecutableConstruct -> ActionStmt -> AssignmentStmt = 'logical_and=(log1.and.log2)'
+| | | | | Variable = 'logical_and'
+| | | | | | Designator -> DataRef -> Name = 'logical_and'
+| | | | | Expr = '(log1.and.log2)'
+| | | | | | Parentheses -> Expr = 'log1.and.log2'
+| | | | | | | AND
+| | | | | | | | Expr = 'log1'
+| | | | | | | | | Designator -> DataRef -> Name = 'log1'
+| | | | | | | | Expr = 'log2'
+| | | | | | | | | Designator -> DataRef -> Name = 'log2'
+| | | EndFunctionStmt -> 
+| EndModuleStmt -> 
+ProgramUnit -> Module
+| ModuleStmt -> Name = 'new_operator'
+| SpecificationPart
+| | ImplicitPart -> ImplicitPartStmt -> ImplicitStmt -> 
+| | DeclarationConstruct -> SpecificationConstruct -> OtherSpecificationStmt -> AccessStmt
+| | | AccessSpec -> Kind = Private
+| | DeclarationConstruct -> SpecificationConstruct -> OtherSpecificationStmt -> AccessStmt
+| | | AccessSpec -> Kind = Public
+| | | AccessId -> GenericSpec -> DefinedOperator -> DefinedOpName -> Name = '.myoperator.'
+| | DeclarationConstruct -> SpecificationConstruct -> InterfaceBlock
+| | | InterfaceStmt -> GenericSpec -> DefinedOperator -> DefinedOpName -> Name = '.myoperator.'
+| | | InterfaceSpecification -> ProcedureStmt
+| | | | Kind = ModuleProcedure
+| | | | Name = 'myprocedure'
+| | | EndInterfaceStmt -> 
+| ModuleSubprogramPart
+| | ContainsStmt
+| | ModuleSubprogram -> FunctionSubprogram
+| | | FunctionStmt
+| | | | PrefixSpec -> Pure
+| | | | PrefixSpec -> DeclarationTypeSpec -> IntrinsicTypeSpec -> IntegerTypeSpec -> 
+| | | | Name = 'myprocedure'
+| | | | Name = 'param1'
+| | | | Name = 'param2'
+| | | SpecificationPart
+| | | | ImplicitPart -> 
+| | | | DeclarationConstruct -> SpecificationConstruct -> TypeDeclarationStmt
+| | | | | DeclarationTypeSpec -> IntrinsicTypeSpec -> IntegerTypeSpec -> 
+| | | | | AttrSpec -> IntentSpec -> Intent = In
+| | | | | EntityDecl
+| | | | | | Name = 'param1'
+| | | | | EntityDecl
+| | | | | | Name = 'param2'
+| | | ExecutionPart -> Block
+| | | | ExecutionPartConstruct -> ExecutableConstruct -> ActionStmt -> AssignmentStmt = 'myprocedure=param1+param2'
+| | | | | Variable = 'myprocedure'
+| | | | | | Designator -> DataRef -> Name = 'myprocedure'
+| | | | | Expr = 'param1+param2'
+| | | | | | Add
+| | | | | | | Expr = 'param1'
+| | | | | | | | Designator -> DataRef -> Name = 'param1'
+| | | | | | | Expr = 'param2'
+| | | | | | | | Designator -> DataRef -> Name = 'param2'
+| | | EndFunctionStmt -> 
+| EndModuleStmt -> 
+ProgramUnit -> MainProgram
+| ProgramStmt -> Name = 'sample'
+| SpecificationPart
+| | UseStmt
+| | | Name = 'omp_lib'
+| | UseStmt
+| | | Name = 'overload_asterisk'
+| | UseStmt
+| | | Name = 'new_operator'
+| | ImplicitPart -> ImplicitPartStmt -> ImplicitStmt -> 
+| | DeclarationConstruct -> SpecificationConstruct -> TypeDeclarationStmt
+| | | DeclarationTypeSpec -> IntrinsicTypeSpec -> Logical
+| | | EntityDecl
+| | | | Name = 't'
+| | | | Initialization -> Constant -> Expr = '.true._4'
+| | | | | LiteralConstant -> LogicalLiteralConstant
+| | | | | | bool
+| | | EntityDecl
+| | | | Name = 'f'
+| | | | Initialization -> Constant -> Expr = '.false._4'
+| | | | | LiteralConstant -> LogicalLiteralConstant
+| | | | | | bool
+| | DeclarationConstruct -> SpecificationConstruct -> TypeDeclarationStmt
+| | | DeclarationTypeSpec -> IntrinsicTypeSpec -> IntegerTypeSpec -> 
+| | | EntityDecl
+| | | | Name = 'x'
+| | | EntityDecl
+| | | | Name = 'y'
+| ExecutionPart -> Block
+| | ExecutionPartConstruct -> ExecutableConstruct -> OpenMPConstruct -> OpenMPAtomicConstruct -> OmpAtomicUpdate
+| | | OmpAtomicClauseList -> 
+| | | Verbatim
+| | | OmpAtomicClauseList -> 
+| | | AssignmentStmt = 'x=x*y'
+| | | | Variable = 'x'
+| | | | | Designator -> DataRef -> Name = 'x'
+| | | | Expr = 'x*y'
+| | | | | Multiply
+| | | | | | Expr = 'x'
+| | | | | | | Designator -> DataRef -> Name = 'x'
+| | | | | | Expr = 'y'
+| | | | | | | Designator -> DataRef -> Name = 'y'
+| | ExecutionPartConstruct -> ExecutableConstruct -> OpenMPConstruct -> OpenMPAtomicConstruct -> OmpAtomic
+| | | Verbatim
+| | | OmpAtomicClauseList -> 
+| | | AssignmentStmt = 'x=new_operator$new_operator$myprocedure(x,y)'
+| | | | Variable = 'x'
+| | | | | Designator -> DataRef -> Name = 'x'
+| | | | Expr = 'new_operator$new_operator$myprocedure(x,y)'
+| | | | | DefinedBinary
+| | | | | | DefinedOpName -> Name = '.myoperator.'
+| | | | | | Expr = 'x'
+| | | | | | | Designator -> DataRef -> Name = 'x'
+| | | | | | Expr = 'y'
+| | | | | | | Designator -> DataRef -> Name = 'y'
+| EndProgramStmt -> 
