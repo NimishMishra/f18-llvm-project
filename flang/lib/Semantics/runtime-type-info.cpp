@@ -636,8 +636,8 @@ const Symbol *RuntimeTableBuilder::DescribeType(Scope &dtScope) {
     // instances without any initialized components, analyze the type
     // and set a flag if there's nothing to do for it at run time.
     AddValue(dtValues, derivedTypeSchema_, "noinitializationneeded"s,
-        IntExpr<1>(derivedTypeSpec &&
-            !derivedTypeSpec->HasDefaultInitialization(false, false)));
+        IntExpr<1>(derivedTypeSpec && true));
+
     // Similarly, a flag to short-circuit destruction when not needed.
     AddValue(dtValues, derivedTypeSchema_, "nodestructionneeded"s,
         IntExpr<1>(derivedTypeSpec && !derivedTypeSpec->HasDestruction()));
