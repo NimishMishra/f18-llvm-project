@@ -54,6 +54,7 @@
 #include <cassert>
 #include <cstdint>
 #include <iterator>
+#include <iostream>
 
 using namespace llvm;
 
@@ -204,6 +205,7 @@ static bool atomicSizeSupported(const TargetLowering *TLI, Inst *I) {
 
 bool AtomicExpandImpl::run(Function &F, const TargetMachine *TM) {
   const auto *Subtarget = TM->getSubtargetImpl(F);
+  F.dump();
   if (!Subtarget->enableAtomicExpand())
     return false;
   TLI = Subtarget->getTargetLowering();
@@ -364,8 +366,7 @@ FunctionPass *llvm::createAtomicExpandLegacyPass() {
 
 PreservedAnalyses AtomicExpandPass::run(Function &F,
                                         FunctionAnalysisManager &AM) {
-  AtomicExpandImpl AE;
-
+  AtomicExpandImpl AE; 
   bool Changed = AE.run(F, TM);
   if (!Changed)
     return PreservedAnalyses::all();
@@ -1994,5 +1995,197 @@ bool AtomicExpandImpl::expandAtomicOpToLibcall(
     I->replaceAllUsesWith(V);
   }
   I->eraseFromParent();
+  return true;
+}
+
+
+bool llvm::emitAtomicLibCall(
+    Instruction *I, unsigned Size, Align Alignment, Value *PointerOperand,
+    Value *ValueOperand, Value *CASExpected, AtomicOrdering Ordering,
+    AtomicOrdering Ordering2, 
+    llvm::PHINode *PHI, llvm::BasicBlock *ContBB, llvm::BasicBlock *ExitBB) {
+  
+
+  LLVMContext &Ctx = I->getContext();
+  Module *M = I->getModule();
+  const DataLayout &DL = M->getDataLayout();
+  IRBuilder<> Builder(I);
+  IRBuilder<> AllocaBuilder(&I->getFunction()->getEntryBlock().front());
+
+  bool UseSizedLibcall = canUseSizedAtomicCall(Size, Alignment, DL);
+  Type *SizedIntTy = Type::getIntNTy(Ctx, Size * 8);
+
+  const Align AllocaAlignment = DL.getPrefTypeAlign(SizedIntTy);
+
+  // TODO: the "order" argument type is "int", not int32. So
+  // getInt32Ty may be wrong if the arch uses e.g. 16-bit ints.
+  ConstantInt *SizeVal64 = ConstantInt::get(Type::getInt64Ty(Ctx), Size);
+  assert(Ordering != AtomicOrdering::NotAtomic && "expect atomic MO");
+  Constant *OrderingVal =
+      ConstantInt::get(Type::getInt32Ty(Ctx), (int)toCABI(Ordering));
+  Constant *Ordering2Val = nullptr;
+  if (CASExpected) {
+    assert(Ordering2 != AtomicOrdering::NotAtomic && "expect atomic MO");
+    Ordering2Val =
+        ConstantInt::get(Type::getInt32Ty(Ctx), (int)toCABI(Ordering2));
+  }
+  bool HasResult = I->getType() != Type::getVoidTy(Ctx);
+
+  std::cout << "using sized libcall: " << UseSizedLibcall << std::endl;
+  std::cout << "has result : " << HasResult << std::endl;
+ 
+  // Build up the function call. There's two kinds. First, the sized
+  // variants.  These calls are going to be one of the following (with
+  // N=1,2,4,8,16):
+  //  iN    __atomic_load_N(iN *ptr, int ordering)
+  //  void  __atomic_store_N(iN *ptr, iN val, int ordering)
+  //  iN    __atomic_{exchange|fetch_*}_N(iN *ptr, iN val, int ordering)
+  //  bool  __atomic_compare_exchange_N(iN *ptr, iN *expected, iN desired,
+  //                                    int success_order, int failure_order)
+  //
+  // Note that these functions can be used for non-integer atomic
+  // operations, the values just need to be bitcast to integers on the
+  // way in and out.
+  //
+  // And, then, the generic variants. They look like the following:
+  //  void  __atomic_load(size_t size, void *ptr, void *ret, int ordering)
+  //  void  __atomic_store(size_t size, void *ptr, void *val, int ordering)
+  //  void  __atomic_exchange(size_t size, void *ptr, void *val, void *ret,
+  //                          int ordering)
+  //  bool  __atomic_compare_exchange(size_t size, void *ptr, void *expected,
+  //                                  void *desired, int success_order,
+  //                                  int failure_order)
+  //
+  // The different signatures are built up depending on the
+  // 'UseSizedLibcall', 'CASExpected', 'ValueOperand', and 'HasResult'
+  // variables.
+
+  AllocaInst *AllocaCASExpected = nullptr;
+  AllocaInst *AllocaValue = nullptr;
+  AllocaInst *AllocaResult = nullptr;
+
+  Type *ResultTy;
+  SmallVector<Value *, 6> Args;
+  AttributeList Attr;
+
+  // 'size' argument.
+  if (!UseSizedLibcall) {
+    // Note, getIntPtrType is assumed equivalent to size_t.
+    Args.push_back(ConstantInt::get(DL.getIntPtrType(Ctx), Size));
+  }
+
+  // 'ptr' argument.
+  // note: This assumes all address spaces share a common libfunc
+  // implementation and that addresses are convertable.  For systems without
+  // that property, we'd need to extend this mechanism to support AS-specific
+  // families of atomic intrinsics.
+  Value *PtrVal = PointerOperand;
+  PtrVal = Builder.CreateAddrSpaceCast(PtrVal, PointerType::getUnqual(Ctx));
+  Args.push_back(PtrVal);
+
+
+  // 'expected' argument, if present.
+  if (CASExpected) {
+    AllocaCASExpected = AllocaBuilder.CreateAlloca(CASExpected->getType());
+    AllocaCASExpected->setAlignment(AllocaAlignment);
+    Builder.CreateLifetimeStart(AllocaCASExpected, SizeVal64);
+    Builder.CreateAlignedStore(CASExpected, AllocaCASExpected, AllocaAlignment);
+    Args.push_back(AllocaCASExpected);
+  }
+
+  // 'val' argument ('desired' for cas), if present.
+  if (ValueOperand) {
+    if (UseSizedLibcall and false) {
+      Value *IntValue =
+          Builder.CreateBitOrPointerCast(ValueOperand, SizedIntTy);
+      Args.push_back(IntValue);
+    } else {
+      AllocaValue = AllocaBuilder.CreateAlloca(ValueOperand->getType());
+      AllocaValue->setAlignment(AllocaAlignment);
+      Builder.CreateLifetimeStart(AllocaValue, SizeVal64);
+      Builder.CreateAlignedStore(ValueOperand, AllocaValue, AllocaAlignment);
+      Args.push_back(AllocaValue);
+    }
+  }
+  
+  // 'ret' argument.
+  if (!CASExpected && HasResult && !UseSizedLibcall) {
+    AllocaResult = AllocaBuilder.CreateAlloca(I->getType());
+    AllocaResult->setAlignment(AllocaAlignment);
+    Builder.CreateLifetimeStart(AllocaResult, SizeVal64);
+    Args.push_back(AllocaResult);
+  }
+  
+  
+
+
+  // 'ordering' ('success_order' for cas) argument.
+  Args.push_back(OrderingVal);
+
+  // 'failure_order' argument, if present.
+  if (Ordering2Val)
+    Args.push_back(Ordering2Val);
+
+  
+  
+  // Now, the return type.
+  if (CASExpected) {
+    ResultTy = Type::getInt1Ty(Ctx);
+    Attr = Attr.addRetAttribute(Ctx, Attribute::ZExt);
+  } else if (HasResult && UseSizedLibcall)
+    ResultTy = SizedIntTy;
+  else
+    ResultTy = Type::getVoidTy(Ctx);
+
+  
+  
+  // Done with setting up arguments and return types, create the call:
+  SmallVector<Type *, 6> ArgTys;
+  for (Value *Arg : Args)
+    ArgTys.push_back(Arg->getType());
+  FunctionType *FnType = FunctionType::get(ResultTy, ArgTys, false);
+  FunctionCallee LibcallFn =
+      M->getOrInsertFunction("__atomic_compare_exchange", FnType, Attr);
+  CallInst *Call = Builder.CreateCall(LibcallFn, Args);
+  Call->setAttributes(Attr);
+  Value *Result = Call;
+
+  
+
+  // And then, extract the results...
+  if (ValueOperand && !UseSizedLibcall)
+    Builder.CreateLifetimeEnd(AllocaValue, SizeVal64);
+  
+  if (CASExpected) {
+    // The final result from the CAS is {load of 'expected' alloca, bool result
+    // from call}
+	  std::cout << "CAS Expected is true\n";
+    Type *FinalResultTy = I->getType();
+    Value *V = PoisonValue::get(FinalResultTy);
+    Value *ExpectedOut = Builder.CreateAlignedLoad(
+        CASExpected->getType(), AllocaCASExpected, AllocaAlignment);
+    
+    Builder.CreateLifetimeEnd(AllocaCASExpected, SizeVal64);
+    V = Builder.CreateInsertValue(V, ExpectedOut, 0);
+    V = Builder.CreateInsertValue(V, Result, 1);
+    I->replaceAllUsesWith(V);
+    
+    Value *PreviousVal = Builder.CreateExtractValue(V, /*Idxs=*/0);
+    Value *SuccessFailureVal = Builder.CreateExtractValue(V, /*Idxs=*/1);
+    PHI->addIncoming(PreviousVal, Builder.GetInsertBlock());
+    Builder.CreateCondBr(SuccessFailureVal, ExitBB, ContBB);
+  } else if (HasResult) {
+    Value *V;
+    if (UseSizedLibcall and false)
+      V = Builder.CreateBitOrPointerCast(Result, I->getType());
+    else {
+      V = Builder.CreateAlignedLoad(I->getType(), AllocaResult,
+                                    AllocaAlignment);
+      Builder.CreateLifetimeEnd(AllocaResult, SizeVal64);
+    }
+    I->replaceAllUsesWith(V);
+  }
+
+  //I->eraseFromParent();
   return true;
 }

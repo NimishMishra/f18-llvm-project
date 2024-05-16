@@ -12,6 +12,7 @@
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/Support/AtomicOrdering.h"
+#include "llvm/CodeGen/RuntimeLibcalls.h"
 
 namespace llvm {
 
@@ -59,6 +60,11 @@ using CreateCmpXchgInstFun =
 /// Returns true if the containing function was modified.
 bool expandAtomicRMWToCmpXchg(AtomicRMWInst *AI, CreateCmpXchgInstFun CreateCmpXchg);
 
+bool emitAtomicLibCall(
+	Instruction *I, unsigned Size, Align Alignment, Value *PointerOperand,
+	Value *ValueOperand, Value *CASExpected, AtomicOrdering Ordering,
+	AtomicOrdering Ordering2, 
+	llvm::PHINode *PHI, llvm::BasicBlock *ContBB, llvm::BasicBlock *ExitBB);
 } // end namespace llvm
 
 #endif // LLVM_CODEGEN_ATOMICEXPANDUTILS_H
