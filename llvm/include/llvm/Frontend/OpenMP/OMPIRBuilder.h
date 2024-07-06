@@ -22,6 +22,7 @@
 #include "llvm/TargetParser/Triple.h"
 #include <forward_list>
 #include <map>
+#include "llvm/Frontend/Atomic/Atomic.h"
 #include <optional>
 
 namespace llvm {
@@ -456,6 +457,29 @@ public:
       : M(M), Builder(M.getContext()), OffloadInfoManager(this),
         T(Triple(M.getTargetTriple())) {}
   ~OpenMPIRBuilder();
+
+  
+  class AtomicInfo : public llvm::AtomicInfo<IRBuilder<>> {
+
+	 llvm::Value* AtomicVar;
+	 public:
+		 AtomicInfo(
+			IRBuilder<>* Builder, llvm::Type *Ty, uint64_t AtomicSizeInBits,
+			uint64_t ValueSizeInBits, llvm::Align AtomicAlign, llvm::Align ValueAlign, bool UseLibcall,
+			llvm::Value* AtomicVar
+		 ) : llvm::AtomicInfo<IRBuilder<>>(Builder, Ty, AtomicSizeInBits, ValueSizeInBits,
+			 AtomicAlign, ValueAlign, UseLibcall), AtomicVar(AtomicVar) {}
+
+	  llvm::Value* getAtomicPointer() const override {
+	  	return AtomicVar;
+	  }
+	  void decorateWithTBAA(llvm::Instruction *I) override {}
+	  llvm::AllocaInst* CreateAlloca(llvm::Type* Ty, const llvm::Twine &Name) override {
+	  	llvm::AllocaInst* allocaInst = Builder->CreateAlloca(Ty);
+		allocaInst->setName(Name);
+		return allocaInst;
+	  }
+  };
 
   /// Initialize the internal state, this will put structures types and
   /// potentially other helpers into the underlying module. Must be called

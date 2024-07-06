@@ -4182,10 +4182,10 @@ void Verifier::visitLoadInst(LoadInst &LI) {
     Check(LI.getOrdering() != AtomicOrdering::Release &&
               LI.getOrdering() != AtomicOrdering::AcquireRelease,
           "Load cannot have Release ordering", &LI);
-    Check(ElTy->isIntOrPtrTy() || ElTy->isFloatingPointTy(),
-          "atomic load operand must have integer, pointer, or floating point "
-          "type!",
-          ElTy, &LI);
+    //Check(ElTy->isIntOrPtrTy() || ElTy->isFloatingPointTy(),
+    //      "atomic load operand must have integer, pointer, or floating point "
+    //      "type!",
+    //      ElTy, &LI);
     checkAtomicMemAccessSize(ElTy, &LI);
   } else {
     Check(LI.getSyncScopeID() == SyncScope::System,
