@@ -3039,6 +3039,15 @@ private:
                    AtomicUpdateCallbackTy &UpdateOp, bool VolatileX,
                    bool IsXBinopExpr);
 
+  std::pair<llvm::LoadInst *, llvm::AllocaInst *>
+  EmitAtomicLoadLibcall(Value *X, Type *XElemTy, llvm::AtomicOrdering AO,
+                        uint64_t AtomicSizeInBits);
+
+  std::pair<llvm::Value *, llvm::Value *> EmitAtomicCompareExchangeLibcall(
+      Value *X, Type *XElemTy, uint64_t AtomicSizeInBits,
+      llvm::Value *ExpectedVal, llvm::Value *DesiredVal,
+      llvm::AtomicOrdering Success, llvm::AtomicOrdering Failure);
+
   /// Emit the binary op. described by \p RMWOp, using \p Src1 and \p Src2 .
   ///
   /// \Return The instruction

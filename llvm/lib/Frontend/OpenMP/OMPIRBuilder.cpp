@@ -7901,6 +7901,83 @@ Value *OpenMPIRBuilder::emitRMWOpAsInstruction(Value *Src1, Value *Src2,
   llvm_unreachable("Unsupported atomic update operation");
 }
 
+std::pair<llvm::LoadInst *, llvm::AllocaInst *>
+OpenMPIRBuilder::EmitAtomicLoadLibcall(Value *X, Type *XElemTy,
+                                       llvm::AtomicOrdering AO,
+                                       uint64_t AtomicSizeInBits) {
+  LLVMContext &Ctx = Builder.getContext();
+  Type *SizedIntTy = Type::getIntNTy(Ctx, AtomicSizeInBits * 8);
+  Type *ResultTy;
+  SmallVector<Value *, 6> Args;
+  AttributeList Attr;
+  Module *M = Builder.GetInsertBlock()->getModule();
+  const DataLayout &DL = M->getDataLayout();
+  Args.push_back(ConstantInt::get(DL.getIntPtrType(Ctx), AtomicSizeInBits / 8));
+  Value *PtrVal = X;
+  PtrVal = Builder.CreateAddrSpaceCast(PtrVal, PointerType::getUnqual(Ctx));
+  Args.push_back(PtrVal);
+  llvm::AllocaInst *allocaInst = Builder.CreateAlloca(XElemTy);
+  allocaInst->setName(X->getName() + "atomic.temp.load");
+  const Align AllocaAlignment = DL.getPrefTypeAlign(SizedIntTy);
+  allocaInst->setAlignment(AllocaAlignment);
+  Args.push_back(allocaInst);
+  Constant *OrderingVal =
+      ConstantInt::get(Type::getInt32Ty(Ctx), (int)toCABI(AO));
+  Args.push_back(OrderingVal);
+  ResultTy = Type::getVoidTy(Ctx);
+  SmallVector<Type *, 6> ArgTys;
+  for (Value *Arg : Args)
+    ArgTys.push_back(Arg->getType());
+  FunctionType *FnType = FunctionType::get(ResultTy, ArgTys, false);
+  FunctionCallee LibcallFn =
+      M->getOrInsertFunction("__atomic_load", FnType, Attr);
+  CallInst *Call = Builder.CreateCall(LibcallFn, Args);
+  Call->setAttributes(Attr);
+  return std::make_pair(
+      Builder.CreateAlignedLoad(XElemTy, allocaInst, AllocaAlignment),
+      allocaInst);
+}
+
+std::pair<llvm::Value *, llvm::Value *>
+OpenMPIRBuilder::EmitAtomicCompareExchangeLibcall(
+    Value *X, Type *XElemTy, uint64_t AtomicSizeInBits,
+    llvm::Value *ExpectedVal, llvm::Value *DesiredVal,
+    llvm::AtomicOrdering Success, llvm::AtomicOrdering Failure) {
+  LLVMContext &Ctx = Builder.getContext();
+  uint64_t IntBits = 32;
+  uint16_t SizeTBits = 64;
+  uint16_t BitsPerByte = 8;
+  llvm::Value *AtomicSizeValue = llvm::ConstantInt::get(
+      llvm::IntegerType::get(Ctx, SizeTBits), AtomicSizeInBits / BitsPerByte);
+  llvm::Value *Args[6] = {
+      AtomicSizeValue,
+      X,
+      ExpectedVal,
+      DesiredVal,
+      llvm::Constant::getIntegerValue(
+          llvm::IntegerType::get(Ctx, IntBits),
+          llvm::APInt(IntBits, (uint64_t)Success, /*signed=*/true)),
+      llvm::Constant::getIntegerValue(
+          llvm::IntegerType::get(Ctx, IntBits),
+          llvm::APInt(IntBits, (uint64_t)Failure, /*signed=*/true)),
+  };
+  SmallVector<Type *, 6> ArgTys;
+  Type *ResultType = llvm::IntegerType::getInt1Ty(Ctx);
+  llvm::AttrBuilder Attr(Ctx);
+  Attr.addAttribute(llvm::Attribute::NoUnwind);
+  Attr.addAttribute(llvm::Attribute::WillReturn);
+  llvm::AttributeList fnAttrs =
+      llvm::AttributeList::get(Ctx, llvm::AttributeList::FunctionIndex, Attr);
+  Module *M = Builder.GetInsertBlock()->getModule();
+  for (Value *Arg : Args)
+    ArgTys.push_back(Arg->getType());
+  FunctionType *FnType = FunctionType::get(ResultType, ArgTys, false);
+  FunctionCallee LibcallFn =
+      M->getOrInsertFunction("__atomic_compare_exchange", FnType, fnAttrs);
+  CallInst *Call = Builder.CreateCall(LibcallFn, Args);
+  return std::make_pair(ExpectedVal, Call);
+}
+
 std::pair<Value *, Value *> OpenMPIRBuilder::emitAtomicUpdate(
     InsertPointTy AllocaIP, Value *X, Type *XElemTy, Value *Expr,
     AtomicOrdering AO, AtomicRMWInst::BinOp RMWOp,
@@ -7935,6 +8012,50 @@ std::pair<Value *, Value *> OpenMPIRBuilder::emitAtomicUpdate(
       Res.second = Res.first;
     else
       Res.second = emitRMWOpAsInstruction(Res.first, Expr, RMWOp);
+  } else if (RMWOp == llvm::AtomicRMWInst::BinOp::BAD_BINOP) {
+    LoadInst *OldVal =
+        Builder.CreateLoad(XElemTy, X, X->getName() + ".atomic.load");
+    OldVal->setAtomic(AO);
+    const DataLayout &LoadDL = OldVal->getModule()->getDataLayout();
+    unsigned LoadSize =
+        LoadDL.getTypeStoreSize(OldVal->getPointerOperand()->getType());
+    auto AtomicLoadRes = EmitAtomicLoadLibcall(X, XElemTy, AO, LoadSize * 8);
+    BasicBlock *CurBB = Builder.GetInsertBlock();
+    Instruction *CurBBTI = CurBB->getTerminator();
+    CurBBTI = CurBBTI ? CurBBTI : Builder.CreateUnreachable();
+    BasicBlock *ExitBB =
+        CurBB->splitBasicBlock(CurBBTI, X->getName() + ".atomic.exit");
+    BasicBlock *ContBB = CurBB->splitBasicBlock(CurBB->getTerminator(),
+                                                X->getName() + ".atomic.cont");
+    ContBB->getTerminator()->eraseFromParent();
+    Builder.restoreIP(AllocaIP);
+    AllocaInst *NewAtomicAddr = Builder.CreateAlloca(XElemTy);
+    NewAtomicAddr->setName(X->getName() + "x.new.val");
+    Builder.SetInsertPoint(ContBB);
+    llvm::PHINode *PHI = Builder.CreatePHI(OldVal->getType(), 2);
+    PHI->addIncoming(AtomicLoadRes.first, CurBB);
+    Value *OldExprVal = PHI;
+    Value *Upd = UpdateOp(OldExprVal, Builder);
+    Builder.CreateStore(Upd, NewAtomicAddr);
+    AtomicOrdering Failure =
+        llvm::AtomicCmpXchgInst::getStrongestFailureOrdering(AO);
+    auto Result = EmitAtomicCompareExchangeLibcall(X, XElemTy, LoadSize * 8,
+                                                   AtomicLoadRes.second,
+                                                   NewAtomicAddr, AO, Failure);
+    LoadInst *PHILoad = Builder.CreateLoad(XElemTy, Result.first);
+    PHI->addIncoming(PHILoad, Builder.GetInsertBlock());
+    Builder.CreateCondBr(Result.second, ExitBB, ContBB);
+    OldVal->eraseFromParent();
+    Res.first = OldExprVal;
+    Res.second = Upd;
+
+    if (UnreachableInst *ExitTI =
+            dyn_cast<UnreachableInst>(ExitBB->getTerminator())) {
+      CurBBTI->eraseFromParent();
+      Builder.SetInsertPoint(ExitBB);
+    } else {
+      Builder.SetInsertPoint(ExitTI);
+    }
   } else {
     IntegerType *IntCastTy =
         IntegerType::get(M.getContext(), XElemTy->getScalarSizeInBits());
