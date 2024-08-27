@@ -321,21 +321,6 @@ static inline void genOmpAccAtomicUpdateStatement(
       },
       assignmentStmtExpr.u);
   StatementContext nonAtomicStmtCtx;
-  if (!nonAtomicSubExprs.empty()) {
-    // Generate non atomic part before all the atomic operations.
-    auto insertionPoint = firOpBuilder.saveInsertionPoint();
-    if (atomicCaptureOp)
-      firOpBuilder.setInsertionPoint(atomicCaptureOp);
-    mlir::Value nonAtomicVal;
-    for (auto *nonAtomicSubExpr : nonAtomicSubExprs) {
-      nonAtomicVal = fir::getBase(converter.genExprValue(
-          currentLocation, *nonAtomicSubExpr, nonAtomicStmtCtx));
-      exprValueOverrides.try_emplace(nonAtomicSubExpr, nonAtomicVal);
-    }
-    if (atomicCaptureOp)
-      firOpBuilder.restoreInsertionPoint(insertionPoint);
-  }
-
   mlir::Operation *atomicUpdateOp = nullptr;
   if constexpr (std::is_same<AtomicListT,
                              Fortran::parser::OmpAtomicClauseList>()) {
