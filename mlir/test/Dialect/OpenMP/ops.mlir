@@ -2047,8 +2047,9 @@ func.func @omp_single_copyprivate(%data_var: memref<i32>) {
 }
 
 // CHECK-LABEL: @omp_task
-// CHECK-SAME: (%[[bool_var:.*]]: i1, %[[i64_var:.*]]: i64, %[[i32_var:.*]]: i32, %[[data_var:.*]]: memref<i32>)
-func.func @omp_task(%bool_var: i1, %i64_var: i64, %i32_var: i32, %data_var: memref<i32>) {
+// CHECK-SAME: (%[[bool_var:.*]]: i1, %[[i64_var:.*]]: i64, %[[i32_var:.*]]: i32, %[[data_var:.*]]: memref<i32>, %[[event_handle:.*]]: !llvm.ptr)
+func.func @omp_task(%bool_var: i1, %i64_var: i64, %i32_var: i32, %data_var: memref<i32>, 
+   			%event_handle : !llvm.ptr) {
 
   // Checking simple task
   // CHECK: omp.task {
@@ -2124,6 +2125,12 @@ func.func @omp_task(%bool_var: i1, %i64_var: i64, %i32_var: i32, %data_var: memr
     // CHECK: "test.foo"() : () -> ()
     "test.foo"() : () -> ()
     // CHECK: omp.terminator
+    omp.terminator
+  }
+
+  // Checking detack clause
+  // CHECK: omp.task detach(%[[event_handle]] : !llvm.ptr)
+  omp.task detach(%event_handle : !llvm.ptr){
     omp.terminator
   }
 
