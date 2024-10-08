@@ -1,6 +1,6 @@
 ! REQUIRES: openmp_runtime
 
-!RUN: %flang_fc1 -emit-hlfir %openmp_flags %s -o - | FileCheck %s
+!RUN: %flang_fc1 -emit-hlfir %openmp_flags -fopenmp-version=50 %s -o - | FileCheck %s
 
 !CHECK-LABEL: func @_QPomp_task_simple() {
 subroutine omp_task_simple
@@ -245,3 +245,18 @@ subroutine task_multiple_clauses()
   !CHECK: omp.terminator
   !$omp end task
 end subroutine task_multiple_clauses
+
+!CHECk-LABEL: func.func @_QPtask_detach() {
+!CHECK: %[[VAL_0:.*]] = fir.alloca i64 {bindc_name = "event", uniq_name = "_QFtask_detachEevent"}
+!CHECK: %[[VAL_1:.*]]:2 = hlfir.declare %[[VAL_0]] {uniq_name = "_QFtask_detachEevent"} : (!fir.ref<i64>) -> (!fir.ref<i64>, !fir.ref<i64>)
+!CHECK: omp.task detach(%[[VAL_1]]#1 : !fir.ref<i64>) {
+!CHECK:   omp.terminator
+!CHECK: }
+!CHECK: return
+!CHECK: }
+subroutine task_detach()
+  use omp_lib
+  integer(kind=omp_event_handle_kind) :: event
+  !$omp task detach(event)
+  !$omp end task
+end subroutine

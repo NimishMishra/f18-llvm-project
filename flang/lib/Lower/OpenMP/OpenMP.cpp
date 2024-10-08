@@ -1307,9 +1307,10 @@ static void genTaskClauses(lower::AbstractConverter &converter,
   cp.processMergeable(clauseOps);
   cp.processPriority(stmtCtx, clauseOps);
   cp.processUntied(clauseOps);
+  cp.processDetach(clauseOps);
   // TODO Support delayed privatization.
 
-  cp.processTODO<clause::Affinity, clause::Detach, clause::InReduction>(
+  cp.processTODO<clause::Affinity, clause::InReduction>(
       loc, llvm::omp::Directive::OMPD_task);
 }
 
@@ -2787,7 +2788,8 @@ static void genOMP(lower::AbstractConverter &converter, lower::SymMap &symTable,
         !std::holds_alternative<clause::ThreadLimit>(clause.u) &&
         !std::holds_alternative<clause::Threads>(clause.u) &&
         !std::holds_alternative<clause::UseDeviceAddr>(clause.u) &&
-        !std::holds_alternative<clause::UseDevicePtr>(clause.u)) {
+        !std::holds_alternative<clause::UseDevicePtr>(clause.u) &&
+        !std::holds_alternative<clause::Detach>(clause.u)) {
       TODO(clauseLocation, "OpenMP Block construct clause");
     }
   }
