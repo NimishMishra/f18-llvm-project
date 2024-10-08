@@ -2115,6 +2115,9 @@ public:
     Put(":");
     Walk(std::get<OmpObjectList>(x.t));
   }
+  void Unparse(const OmpDetachClause &x){
+    Walk(x.v);
+  }
   void Unparse(const OmpInReductionClause &x) {
     Walk(std::get<OmpReductionOperator>(x.t));
     Put(":");
