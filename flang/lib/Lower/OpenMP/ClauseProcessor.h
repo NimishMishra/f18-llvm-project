@@ -88,6 +88,7 @@ public:
   bool processThreadLimit(lower::StatementContext &stmtCtx,
                           mlir::omp::ThreadLimitClauseOps &result) const;
   bool processUntied(mlir::omp::UntiedClauseOps &result) const;
+  bool processDetach(mlir::omp::DetachClauseOps &result) const;
 
   // 'Repeatable' clauses: They can appear multiple times in the clause list.
   bool processAligned(mlir::omp::AlignedClauseOps &result) const;

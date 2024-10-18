@@ -1251,11 +1251,14 @@ public:
   ///                    cannot be resumed until execution of the structured
   ///                    block that is associated with the generated task is
   ///                    completed.
+  /// \param EventHandle If present, signifies the event handle as part of
+  ///			 the detach clause
   InsertPointTy createTask(const LocationDescription &Loc,
                            InsertPointTy AllocaIP, BodyGenCallbackTy BodyGenCB,
                            bool Tied = true, Value *Final = nullptr,
                            Value *IfCondition = nullptr,
-                           SmallVector<DependData> Dependencies = {});
+                           SmallVector<DependData> Dependencies = {},
+                           Value *EventHandle = nullptr);
 
   /// Generator for the taskgroup construct
   ///

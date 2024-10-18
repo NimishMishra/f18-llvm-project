@@ -2198,7 +2198,7 @@ void TaskOp::build(OpBuilder &builder, OperationState &state,
                 makeDenseBoolArrayAttr(ctx, clauses.inReductionByref),
                 makeArrayAttr(ctx, clauses.inReductionSyms), clauses.mergeable,
                 clauses.priority, /*private_vars=*/{}, /*private_syms=*/nullptr,
-                clauses.untied);
+                clauses.untied, clauses.eventHandle);
 }
 
 LogicalResult TaskOp::verify() {

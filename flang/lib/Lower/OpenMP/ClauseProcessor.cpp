@@ -426,6 +426,17 @@ bool ClauseProcessor::processPriority(
   return false;
 }
 
+bool ClauseProcessor::processDetach(mlir::omp::DetachClauseOps &result) const {
+  if (auto *clause = findUniqueClause<omp::clause::Detach>()) {
+    semantics::Symbol *sym = clause->v.sym();
+    mlir::Value symVal = converter.getSymbolAddress(*sym);
+    symVal.dump();
+    result.eventHandle = symVal;
+    return true;
+  }
+  return false;
+}
+
 bool ClauseProcessor::processProcBind(
     mlir::omp::ProcBindClauseOps &result) const {
   if (auto *clause = findUniqueClause<omp::clause::ProcBind>()) {

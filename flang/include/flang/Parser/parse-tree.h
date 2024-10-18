@@ -3515,6 +3515,12 @@ struct OmpIfClause {
   std::tuple<std::optional<DirectiveNameModifier>, ScalarLogicalExpr> t;
 };
 
+// 12.5.2 detach-clause -> DETACH (event-handle)
+struct OmpDetachClause {
+  WRAPPER_CLASS_BOILERPLATE(OmpDetachClause, OmpObject);
+  CharBlock source;
+};
+
 // 2.8.1 aligned-clause -> ALIGNED (variable-name-list[ : scalar-constant])
 struct OmpAlignedClause {
   TUPLE_CLASS_BOILERPLATE(OmpAlignedClause);

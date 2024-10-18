@@ -1138,7 +1138,8 @@ convertOmpTaskOp(omp::TaskOp taskOp, llvm::IRBuilderBase &builder,
   builder.restoreIP(moduleTranslation.getOpenMPBuilder()->createTask(
       ompLoc, allocaIP, bodyCB, !taskOp.getUntied(),
       moduleTranslation.lookupValue(taskOp.getFinal()),
-      moduleTranslation.lookupValue(taskOp.getIfExpr()), dds));
+      moduleTranslation.lookupValue(taskOp.getIfExpr()), dds,
+      moduleTranslation.lookupValue(taskOp.getEventHandle())));
   return bodyGenStatus;
 }
 

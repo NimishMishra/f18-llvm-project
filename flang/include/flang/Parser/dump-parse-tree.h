@@ -475,6 +475,7 @@ public:
   NODE(parser, ObjectDecl)
   NODE(parser, OldParameterStmt)
   NODE(parser, OmpAlignedClause)
+  NODE(parser, OmpDetachClause);
   NODE(parser, OmpAtomic)
   NODE(parser, OmpAtomicCapture)
   NODE(OmpAtomicCapture, Stmt1)

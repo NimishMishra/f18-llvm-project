@@ -593,7 +593,7 @@ Destroy make(const parser::OmpClause::Destroy &inp,
 Detach make(const parser::OmpClause::Detach &inp,
             semantics::SemanticsContext &semaCtx) {
   // inp -> empty
-  llvm_unreachable("Empty: detach");
+  return Detach{makeObject(inp.v.v, semaCtx)};
 }
 
 Device make(const parser::OmpClause::Device &inp,
