@@ -7872,6 +7872,21 @@ OpenMPIRBuilder::createAtomicRead(const LocationDescription &Loc,
     }
   }
   checkAndEmitFlushAfterAtomic(Loc, AO, AtomicKind::Read);
+  if (XRead->getType() != V.Var->getType()) {
+    if (XRead->getType()->isStructTy())
+      XRead = Builder.CreateExtractValue(XRead, /*Idxs=*/0);
+
+    llvm::Type *XReadType = XRead->getType();
+    llvm::Type *VType = V.Var->getType();
+
+    if (llvm::AllocaInst *vAlloca = dyn_cast<llvm::AllocaInst>(V.Var))
+      VType = vAlloca->getAllocatedType();
+
+    if (VType->isIntegerTy() && XReadType->isFloatingPointTy())
+      XRead = Builder.CreateFPToSI(XRead, VType);
+    if (VType->isFloatingPointTy() && XReadType->isIntegerTy())
+      XRead = Builder.CreateSIToFP(XRead, VType);
+  }
   Builder.CreateStore(XRead, V.Var, V.IsVolatile);
   return Builder.saveIP();
 }
