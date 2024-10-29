@@ -468,6 +468,13 @@ class OpenMP_InReductionClauseSkip<
     }
 
     unsigned numInReductionBlockArgs() { return getInReductionVars().size(); }
+
+     /// Returns the number of reduction variables.
+    unsigned getNumReductionVars() { return getReductionVars().size(); }
+    
+    auto getReductionSyms() {
+     return getInReductionSyms();
+    }
   }];
 
   // Description varies depending on the operation. Assembly format not defined
@@ -1127,6 +1134,13 @@ class OpenMP_TaskReductionClauseSkip<
 
     unsigned numTaskReductionBlockArgs() {
       return getTaskReductionVars().size();
+    }
+    
+    /// Returns the number of reduction variables.
+    unsigned getNumReductionVars() { return getReductionVars().size(); }
+    
+    auto getReductionSyms() {
+      return getTaskReductionSyms();
     }
   }];
 
