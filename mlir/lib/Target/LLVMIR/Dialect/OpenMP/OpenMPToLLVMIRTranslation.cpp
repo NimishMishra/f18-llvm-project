@@ -1190,12 +1190,15 @@ llvm::Value *createTaskReductionFunction(
     DenseMap<Value, llvm::Value *> &reductionVariableMap) {
   llvm::LLVMContext &Context = builder.getContext();
   llvm::Type *OpaquePtrTy = llvm::PointerType::get(Context, 0);
-  // TODO: by-ref reduction variables are yet to be handled.
-  if (region.empty() || isByRef[Cnt]) {
+  if (region.empty()) {
     return llvm::Constant::getNullValue(OpaquePtrTy);
   }
-  llvm::FunctionType *funcType =
-      llvm::FunctionType::get(OpaquePtrTy, {OpaquePtrTy, OpaquePtrTy}, false);
+  llvm::FunctionType *funcType = nullptr;
+  if(isByRef[Cnt])
+      funcType = llvm::FunctionType::get(builder.getVoidTy(), {OpaquePtrTy, OpaquePtrTy}, false);
+  else
+      funcType = llvm::FunctionType::get(OpaquePtrTy, {OpaquePtrTy, OpaquePtrTy}, false);
+  
   llvm::Function *function =
       llvm::Function::Create(funcType, llvm::Function::ExternalLinkage, name,
                              builder.GetInsertBlock()->getModule());
@@ -1203,32 +1206,60 @@ llvm::Value *createTaskReductionFunction(
   llvm::BasicBlock *entry =
       llvm::BasicBlock::Create(Context, "entry", function);
   llvm::IRBuilder<> bbBuilder(entry);
-
+  
   llvm::Value *arg0 = function->getArg(0);
-  llvm::Value *arg1 = function->getArg(1);
+  llvm::Value *arg1 = function->getArg(1); 
 
   if (name == "red_init") {
     function->addParamAttr(0, llvm::Attribute::NoAlias);
     function->addParamAttr(1, llvm::Attribute::NoAlias);
-    mapInitializationArgs(op, moduleTranslation, reductionDecls,
+    if(isByRef[Cnt]){
+	// TODO: Handle case where the initializer uses initialization from
+	// declare reduction construct using `arg1Alloca`.
+        llvm::AllocaInst *arg0Alloca = bbBuilder.CreateAlloca(bbBuilder.getPtrTy());
+    	llvm::AllocaInst *arg1Alloca = bbBuilder.CreateAlloca(bbBuilder.getPtrTy()); 
+    	bbBuilder.CreateStore(arg0, arg0Alloca);
+    	bbBuilder.CreateStore(arg1, arg1Alloca);
+	llvm::Value* LoadVal = bbBuilder.CreateLoad(bbBuilder.getPtrTy(), arg0Alloca);
+    	moduleTranslation.mapValue(reductionDecls[Cnt].getInitializerAllocArg(), LoadVal);	
+    }
+    else{
+    	mapInitializationArgs(op, moduleTranslation, reductionDecls,
                           reductionVariableMap, Cnt);
+    }
   } else if (name == "red_comb") {
-    llvm::Value *arg0L = bbBuilder.CreateLoad(redTy, arg0);
-    llvm::Value *arg1L = bbBuilder.CreateLoad(redTy, arg1);
-    moduleTranslation.mapValue(region.front().getArgument(0), arg0L);
-    moduleTranslation.mapValue(region.front().getArgument(1), arg1L);
+	 if(isByRef[Cnt]){
+	        llvm::AllocaInst *arg0Alloca = bbBuilder.CreateAlloca(bbBuilder.getPtrTy());
+    		llvm::AllocaInst *arg1Alloca = bbBuilder.CreateAlloca(bbBuilder.getPtrTy()); 
+    		bbBuilder.CreateStore(arg0, arg0Alloca);
+    		bbBuilder.CreateStore(arg1, arg1Alloca);
+    		llvm::Value *arg0L = bbBuilder.CreateLoad(bbBuilder.getPtrTy(), arg0Alloca);
+    		llvm::Value *arg1L = bbBuilder.CreateLoad(bbBuilder.getPtrTy(), arg1Alloca);
+    		moduleTranslation.mapValue(region.front().getArgument(0), arg0L);
+    		moduleTranslation.mapValue(region.front().getArgument(1), arg1L);		
+	 }
+	  else{
+    		llvm::Value *arg0L = bbBuilder.CreateLoad(redTy, arg0);
+    		llvm::Value *arg1L = bbBuilder.CreateLoad(redTy, arg1);
+    		moduleTranslation.mapValue(region.front().getArgument(0), arg0L);
+    		moduleTranslation.mapValue(region.front().getArgument(1), arg1L); 
+	 }
   }
 
-  SmallVector<llvm::Value *, 1> phis;
+  SmallVector<llvm::Value *, 1> phis; 
   if (failed(inlineConvertOmpRegions(region, "", bbBuilder, moduleTranslation,
                                      &phis)))
     return nullptr;
   assert(
       phis.size() == 1 &&
-      "expected one value to be yielded from the reduction declaration region");
-
-  bbBuilder.CreateStore(phis[0], arg0);
-  bbBuilder.CreateRet(arg0); // Return from the function
+      "expected one value to be yielded from the reduction declaration region"); 
+  if(!isByRef[Cnt]){
+	bbBuilder.CreateStore(phis[0], arg0);	  
+  	bbBuilder.CreateRet(arg0); // Return from the function
+  }
+  else{
+  	bbBuilder.CreateRet(nullptr);
+  }
   return function;
 }
 
