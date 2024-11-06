@@ -46,13 +46,13 @@ llvm.func @_QPtest_task_reduciton() {
 //CHECK:   %[[FLAGS:.*]] = getelementptr inbounds nuw %kmp_taskred_input_t, ptr %[[RED_ELEMENT]], i32 0, i32 6
 //CHECK:   store i64 0, ptr %[[FLAGS]], align 4
 //CHECK:   %[[TID1:.*]] = call i32 @__kmpc_global_thread_num(ptr @{{.*}})
-//CHECK:   %2 = call ptr @__kmpc_taskred_init(i32 %[[TID1]], i32 1, ptr %[[RED_ARRY]])
+//CHECK:   %[[CAPTURED_VAL:.*]] = call ptr @__kmpc_taskred_init(i32 %[[TID1]], i32 1, ptr %[[RED_ARRY]])
 //CHECK:   br label %omp.taskgroup.region
 
 //CHECK: omp.taskgroup.region:
 //CHECK:   %[[VAL3:.*]] = load i32, ptr %[[VAL1]], align 4
-//CHECK:   %4 = add i32 %[[VAL3]], 1
-//CHECK:   store i32 %4, ptr %[[VAL1]], align 4
+//CHECK:   %[[ADD:.*]] = add i32 %[[VAL3]], 1
+//CHECK:   store i32 %[[ADD]], ptr %[[VAL1]], align 4
 //CHECK:   br label %omp.region.cont
 
 //CHECK: omp.region.cont:

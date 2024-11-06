@@ -1631,10 +1631,11 @@ llvm::Value *createTaskReductionFunction(
   return function;
 }
 
-void emitTaskRedInitCall(
-    llvm::IRBuilderBase &builder, LLVM::ModuleTranslation &moduleTranslation,
-    const llvm::OpenMPIRBuilder::LocationDescription &ompLoc, int arraySize,
-    llvm::Value *ArrayAlloca) {
+llvm::CallInst *
+emitTaskRedInitCall(llvm::IRBuilderBase &builder,
+                    LLVM::ModuleTranslation &moduleTranslation,
+                    const llvm::OpenMPIRBuilder::LocationDescription &ompLoc,
+                    int arraySize, llvm::Value *ArrayAlloca) {
   llvm::LLVMContext &Context = builder.getContext();
   uint32_t SrcLocStrSize;
   llvm::Constant *SrcLocStr =
@@ -1649,7 +1650,7 @@ void emitTaskRedInitCall(
   llvm::Function *TaskRedInitFn =
       moduleTranslation.getOpenMPBuilder()->getOrCreateRuntimeFunctionPtr(
           llvm::omp::OMPRTL___kmpc_taskred_init);
-  builder.CreateCall(TaskRedInitFn, {ThreadID, ConstInt, ArrayAlloca});
+  return builder.CreateCall(TaskRedInitFn, {ThreadID, ConstInt, ArrayAlloca});
 }
 
 template <typename OP>
@@ -1701,7 +1702,6 @@ static LogicalResult allocAndInitializeTaskReductionVars(
   // Allocate the array for kmp_taskred_input_t
   llvm::AllocaInst *ArrayAlloca =
       builder.CreateAlloca(ArrayTy, nullptr, "kmp_taskred_array");
-
   // Restore the insertion point
   builder.restoreIP(oldIP);
   llvm::DataLayout DL = builder.GetInsertBlock()->getModule()->getDataLayout();
@@ -1769,8 +1769,9 @@ static LogicalResult allocAndInitializeTaskReductionVars(
   }
 
   // Emit the runtime call
-  emitTaskRedInitCall(builder, moduleTranslation, ompLoc, arraySize,
-                      ArrayAlloca);
+  llvm::CallInst *CallResult = emitTaskRedInitCall(
+      builder, moduleTranslation, ompLoc, arraySize, ArrayAlloca);
+  moduleTranslation.mapCall(op, CallResult);
   return success();
 }
 
