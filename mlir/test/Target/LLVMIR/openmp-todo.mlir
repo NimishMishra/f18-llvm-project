@@ -289,34 +289,6 @@ llvm.func @target_if(%x : i1) {
 
 // -----
 
-omp.declare_reduction @add_f32 : f32
-init {
-^bb0(%arg: f32):
-  %0 = llvm.mlir.constant(0.0 : f32) : f32
-  omp.yield (%0 : f32)
-}
-combiner {
-^bb1(%arg0: f32, %arg1: f32):
-  %1 = llvm.fadd %arg0, %arg1 : f32
-  omp.yield (%1 : f32)
-}
-atomic {
-^bb2(%arg2: !llvm.ptr, %arg3: !llvm.ptr):
-  %2 = llvm.load %arg3 : !llvm.ptr -> f32
-  llvm.atomicrmw fadd %arg2, %2 monotonic : !llvm.ptr, f32
-  omp.yield
-}
-llvm.func @target_in_reduction(%x : !llvm.ptr) {
-  // expected-error@below {{in_reduction clause not yet supported}}
-  // expected-error@below {{LLVM Translation failed for operation: omp.target}}
-  omp.target in_reduction(@add_f32 %x -> %prv : !llvm.ptr) {
-    omp.terminator
-  }
-  llvm.return
-}
-
-// -----
-
 llvm.func @target_is_device_ptr(%x : !llvm.ptr) {
   // expected-error@below {{is_device_ptr clause not yet supported}}
   // expected-error@below {{LLVM Translation failed for operation: omp.target}}
@@ -419,34 +391,6 @@ llvm.func @task_allocate(%x : !llvm.ptr) {
 
 // -----
 
-omp.declare_reduction @add_f32 : f32
-init {
-^bb0(%arg: f32):
-  %0 = llvm.mlir.constant(0.0 : f32) : f32
-  omp.yield (%0 : f32)
-}
-combiner {
-^bb1(%arg0: f32, %arg1: f32):
-  %1 = llvm.fadd %arg0, %arg1 : f32
-  omp.yield (%1 : f32)
-}
-atomic {
-^bb2(%arg2: !llvm.ptr, %arg3: !llvm.ptr):
-  %2 = llvm.load %arg3 : !llvm.ptr -> f32
-  llvm.atomicrmw fadd %arg2, %2 monotonic : !llvm.ptr, f32
-  omp.yield
-}
-llvm.func @task_in_reduction(%x : !llvm.ptr) {
-  // expected-error@below {{in_reduction clause not yet supported}}
-  // expected-error@below {{LLVM Translation failed for operation: omp.task}}
-  omp.task in_reduction(@add_f32 %x -> %prv : !llvm.ptr) {
-    omp.terminator
-  }
-  llvm.return
-}
-
-// -----
-
 llvm.func @task_mergeable() {
   // expected-error@below {{mergeable clause not yet supported}}
   // expected-error@below {{LLVM Translation failed for operation: omp.task}}
@@ -501,34 +445,6 @@ llvm.func @taskgroup_allocate(%x : !llvm.ptr) {
   // expected-error@below {{allocate clause not yet supported}}
   // expected-error@below {{LLVM Translation failed for operation: omp.taskgroup}}
   omp.taskgroup allocate(%x : !llvm.ptr -> %x : !llvm.ptr) {
-    omp.terminator
-  }
-  llvm.return
-}
-
-// -----
-
-omp.declare_reduction @add_f32 : f32
-init {
-^bb0(%arg: f32):
-  %0 = llvm.mlir.constant(0.0 : f32) : f32
-  omp.yield (%0 : f32)
-}
-combiner {
-^bb1(%arg0: f32, %arg1: f32):
-  %1 = llvm.fadd %arg0, %arg1 : f32
-  omp.yield (%1 : f32)
-}
-atomic {
-^bb2(%arg2: !llvm.ptr, %arg3: !llvm.ptr):
-  %2 = llvm.load %arg3 : !llvm.ptr -> f32
-  llvm.atomicrmw fadd %arg2, %2 monotonic : !llvm.ptr, f32
-  omp.yield
-}
-llvm.func @taskgroup_task_reduction(%x : !llvm.ptr) {
-  // expected-error@below {{task_reduction clause not yet supported}}
-  // expected-error@below {{LLVM Translation failed for operation: omp.taskgroup}}
-  omp.taskgroup task_reduction(@add_f32 %x -> %prv : !llvm.ptr) {
     omp.terminator
   }
   llvm.return
