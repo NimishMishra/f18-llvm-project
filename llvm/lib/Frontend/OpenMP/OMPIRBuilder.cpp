@@ -8348,16 +8348,17 @@ OpenMPIRBuilder::createAtomicRead(const LocationDescription &Loc,
   } else if (XElemTy->isStructTy()) {
     // FIXME: Add checks to ensure __atomic_load is emitted iff the
     // target does not support `atomicrmw` of the size of the struct
+    AllocaInst* LoadVal = Builder.CreateAlloca(XElemTy);
     LoadInst *OldVal = Builder.CreateLoad(XElemTy, X.Var, "omp.atomic.read");
-    OldVal->setAtomic(AO);
-    const DataLayout &LoadDL = OldVal->getModule()->getDataLayout();
-    unsigned LoadSize =
-        LoadDL.getTypeStoreSize(OldVal->getPointerOperand()->getType());
+    OldVal->setAtomic(AO); 
+    const DataLayout &LoadDL = LoadVal->getModule()->getDataLayout();
+    unsigned LoadSize = LoadDL.getTypeStoreSize(LoadVal->getAllocatedType());
     OpenMPIRBuilder::AtomicInfo atomicInfo(
         &Builder, XElemTy, LoadSize * 8, LoadSize * 8, OldVal->getAlign(),
         OldVal->getAlign(), true /* UseLibcall */, X.Var);
     auto AtomicLoadRes = atomicInfo.EmitAtomicLoadLibcall(AO);
     XRead = AtomicLoadRes.first;
+    LoadVal->eraseFromParent();
     OldVal->eraseFromParent();
   } else {
     // We need to perform atomic op as integer
@@ -8395,14 +8396,16 @@ OpenMPIRBuilder::createAtomicWrite(const LocationDescription &Loc,
     StoreInst *XSt = Builder.CreateStore(Expr, X.Var, X.IsVolatile);
     XSt->setAtomic(AO);
   } else if (XElemTy->isStructTy()) {
+    AllocaInst* LoadVal = Builder.CreateAlloca(XElemTy);
     LoadInst *OldVal = Builder.CreateLoad(XElemTy, X.Var, "omp.atomic.read");
     const DataLayout &LoadDL = OldVal->getModule()->getDataLayout();
     unsigned LoadSize =
-        LoadDL.getTypeStoreSize(OldVal->getPointerOperand()->getType());
+        LoadDL.getTypeStoreSize(LoadVal->getAllocatedType());
     OpenMPIRBuilder::AtomicInfo atomicInfo(
         &Builder, XElemTy, LoadSize * 8, LoadSize * 8, OldVal->getAlign(),
         OldVal->getAlign(), true /* UseLibcall */, X.Var);
     atomicInfo.EmitAtomicStoreLibcall(AO, Expr);
+    LoadVal->eraseFromParent();
     OldVal->eraseFromParent();
   } else {
     // We need to bitcast and perform atomic op as integers
@@ -8519,12 +8522,13 @@ Expected<std::pair<Value *, Value *>> OpenMPIRBuilder::emitAtomicUpdate(
       Res.second = emitRMWOpAsInstruction(Res.first, Expr, RMWOp);
   } else if (RMWOp == llvm::AtomicRMWInst::BinOp::BAD_BINOP &&
              XElemTy->isStructTy()) {
+    AllocaInst* LoadVal = Builder.CreateAlloca(XElemTy);
     LoadInst *OldVal =
         Builder.CreateLoad(XElemTy, X, X->getName() + ".atomic.load");
     OldVal->setAtomic(AO);
     const DataLayout &LoadDL = OldVal->getModule()->getDataLayout();
     unsigned LoadSize =
-        LoadDL.getTypeStoreSize(OldVal->getPointerOperand()->getType());
+        LoadDL.getTypeStoreSize(LoadVal->getAllocatedType());
 
     OpenMPIRBuilder::AtomicInfo atomicInfo(
         &Builder, XElemTy, LoadSize * 8, LoadSize * 8, OldVal->getAlign(),
@@ -8557,6 +8561,7 @@ Expected<std::pair<Value *, Value *>> OpenMPIRBuilder::emitAtomicUpdate(
     LoadInst *PHILoad = Builder.CreateLoad(XElemTy, Result.first);
     PHI->addIncoming(PHILoad, Builder.GetInsertBlock());
     Builder.CreateCondBr(Result.second, ExitBB, ContBB);
+    LoadVal->eraseFromParent();
     OldVal->eraseFromParent();
     Res.first = OldExprVal;
     Res.second = Upd;
