@@ -3519,6 +3519,7 @@ private:
   BasicBlock *Cond = nullptr;
   BasicBlock *Latch = nullptr;
   BasicBlock *Exit = nullptr;
+  Value *LastIter = nullptr;
 
   /// Add the control blocks of this loop to \p BBs.
   ///
@@ -3552,6 +3553,12 @@ private:
   void mapIndVar(llvm::function_ref<Value *(Instruction *)> Updater);
 
 public:
+  /// Sets the last iteration variable for this loop.
+  void setLastIter(Value *IterVar) { LastIter = std::move(IterVar); }
+
+  /// Returns the last iteration variable for this loop.
+  Value *getLastIter() { return LastIter; }
+
   /// Returns whether this object currently represents the IR of a loop. If
   /// returning false, it may have been consumed by a loop transformation or not
   /// been intialized. Do not use in this case;
