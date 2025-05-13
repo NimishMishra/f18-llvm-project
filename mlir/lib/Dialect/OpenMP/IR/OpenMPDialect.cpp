@@ -1315,6 +1315,50 @@ verifyCopyprivateVarList(Operation *op, OperandRange copyprivateVars,
 }
 
 //===----------------------------------------------------------------------===//
+// Parser, printer and verifier for UpdateVar (OpenMPV5.2 15.9.3)
+// 	update-clause = `update` `(` dependence-kind `)`
+//===----------------------------------------------------------------------===//
+
+static ParseResult parseUpdateVar(OpAsmParser &parser, ArrayAttr &dependKinds) {
+  SmallVector<ClauseUpdateAttr> kindsVec;
+  if (failed(parser.parseCommaSeparatedList([&]() {
+        StringRef keyword;
+        if (parser.parseKeyword(&keyword))
+          return failure();
+        if (std::optional<ClauseUpdate> keywordUpdate =
+                (symbolizeClauseUpdate(keyword)))
+          kindsVec.emplace_back(
+              ClauseUpdateAttr::get(parser.getContext(), *keywordUpdate));
+        else
+          return failure();
+        return success();
+      })))
+    return failure();
+
+  SmallVector<Attribute> kinds(kindsVec.begin(), kindsVec.end());
+  dependKinds = ArrayAttr::get(parser.getContext(), kinds);
+  return success();
+}
+
+/// Print Update clause
+static void printUpdateVar(OpAsmPrinter &p, Operation *op,
+                           std::optional<ArrayAttr> dependKinds) {
+  for (unsigned i = 0, e = dependKinds->size(); i < e; ++i) {
+    p << stringifyClauseUpdate(
+        llvm::cast<mlir::omp::ClauseUpdateAttr>((*dependKinds)[i]).getValue());
+  }
+}
+
+/// Verifies Update clause
+static LogicalResult verifyUpdateVar(Operation *op,
+                                     std::optional<ArrayAttr> dependKinds) {
+  if (dependKinds && dependKinds->size() != 1)
+    return op->emitOpError()
+           << "expected exactly one dependence kind in update clause";
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // Parser, printer and verifier for DependVarList
 //===----------------------------------------------------------------------===//
 
@@ -3265,6 +3309,28 @@ LogicalResult CancellationPointOp::verify() {
                          << "inside a task region";
   }
   return success();
+}
+
+//===----------------------------------------------------------------------===//
+// DebobjOp
+//===----------------------------------------------------------------------===//
+LogicalResult DepobjOp::verify() {
+  bool hasDepend = getDependVars().size() || getDependKindsAttr();
+  auto hasDestroyClause = getDestroyVar();
+  auto hasUpdateClause = getDependenceType();
+
+  auto checkClauseAbsence = [&]() {
+    return (!hasDepend && hasDestroyClause == nullptr && !hasUpdateClause);
+  };
+
+  auto checkMultipleClausesPresence = [&]() {
+    return (hasDepend && hasDestroyClause != nullptr) ||
+           (hasDepend && hasUpdateClause) ||
+           (hasDestroyClause != nullptr && hasUpdateClause);
+  };
+  if (checkClauseAbsence() || checkMultipleClausesPresence())
+    return emitError("expected exactly one clause on depobj construct");
+  return verifyUpdateVar(this->getOperation(), getDependenceType());
 }
 
 //===----------------------------------------------------------------------===//

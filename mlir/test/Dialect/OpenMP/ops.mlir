@@ -3176,3 +3176,16 @@ func.func @omp_workshare_loop_wrapper_attrs(%idx : index) {
   }
   return
 }
+
+// CHECK-LABEL: func @omp_depobj
+func.func @omp_depobj(%arg0: memref<i32>, %arg1: memref<i32>) {
+  // CHECK-NEXT: omp.depobj(%[[ARG0:.*]] : memref<i32>) depend(taskdependin -> %[[ARG1:.*]] : memref<i32>)
+  omp.depobj (%arg0: memref<i32>) depend(taskdependin -> %arg1 : memref<i32>)
+
+  // CHECK-NEXT: omp.depobj(%[[ARG0:.*]] : memref<i32>) update(in)
+  omp.depobj (%arg0: memref<i32>) update(in)
+
+  // CHECK-NEXT: omp.depobj(%[[ARG0:.*]] : memref<i32>) destroy(%[[ARG0:.*]] : memref<i32>)
+  omp.depobj (%arg0: memref<i32>) destroy (%arg0 : memref<i32>)
+  return
+}

@@ -2960,3 +2960,38 @@ llvm.func @invalid_mapper(%0 : !llvm.ptr) {
   }
   llvm.return
 }
+
+// -----
+
+func.func @depobj(%arg0 : memref<i32>, %arg1: memref<i32>){
+  // expected-error @below {{expected exactly one clause on depobj construct}}
+  omp.depobj (%arg0: memref<i32>)
+}
+
+// -----
+
+func.func @depobj(%arg0 : memref<i32>, %arg1: memref<i32>){
+  // expected-error @below {{expected exactly one clause on depobj construct}}
+  omp.depobj (%arg0: memref<i32>) depend(taskdependin -> %arg1 : memref<i32>) update(in)
+}
+
+// -----
+
+func.func @depobj(%arg0 : memref<i32>, %arg1: memref<i32>){
+  // expected-error @below {{expected exactly one clause on depobj construct}}
+  omp.depobj (%arg0: memref<i32>) depend(taskdependin -> %arg1 : memref<i32>) destroy (%arg0 : memref<i32>)
+}
+
+// -----
+
+func.func @depobj(%arg0 : memref<i32>, %arg1: memref<i32>){
+  // expected-error @below {{expected exactly one clause on depobj construct}}
+  omp.depobj (%arg0: memref<i32>) update(in) destroy (%arg0 : memref<i32>)
+}
+
+// -----
+
+func.func @depobj(%arg0 : memref<i32>, %arg1: memref<i32>){
+  // expected-error @below {{'omp.depobj' op expected exactly one dependence kind in update clause}}
+  omp.depobj (%arg0: memref<i32>) update(in,out)
+}

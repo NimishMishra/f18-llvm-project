@@ -124,6 +124,27 @@ def ClauseTaskDependAttr : OpenMP_EnumAttr<ClauseTaskDepend,
 }
 
 //===----------------------------------------------------------------------===//
+// clause_update enum.
+//===----------------------------------------------------------------------===//
+
+def ClauseUpdateDepobj : I32EnumAttrCase<"depobj", 0>;
+def ClauseUpdateIn : I32EnumAttrCase<"in", 1>;
+def ClauseUpdateInOut : I32EnumAttrCase<"inout", 2>;
+def ClauseUpdateMutexInOutSet : I32EnumAttrCase<"mutexinoutset", 3>;
+def ClauseUpdateInOutSet : I32EnumAttrCase<"inoutset", 4>;
+def ClauseUpdateOutSet : I32EnumAttrCase<"out", 5>;
+
+def ClauseUpdate
+    : OpenMP_I32EnumAttr<"ClauseUpdate", "Update clause",
+                         [ClauseUpdateDepobj, ClauseUpdateIn, ClauseUpdateInOut,
+                          ClauseUpdateMutexInOutSet, ClauseUpdateInOutSet,
+                          ClauseUpdateOutSet]>;
+
+def ClauseUpdateAttr : OpenMP_EnumAttr<ClauseUpdate, "clause_update"> {
+  let assemblyFormat = "`(` $value `)`";
+}
+
+//===----------------------------------------------------------------------===//
 // data_sharing_type enum.
 //===----------------------------------------------------------------------===//
 

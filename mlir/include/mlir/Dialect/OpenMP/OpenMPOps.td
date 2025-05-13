@@ -1612,6 +1612,21 @@ def AtomicCaptureOp : OpenMP_Op<"atomic.capture", traits = [
 }
 
 //===----------------------------------------------------------------------===//
+// [5.2] 15.9.4 depobj Directive
+//===----------------------------------------------------------------------===//
+
+def DepobjOp : OpenMP_Op<"depobj", traits = [AttrSizedOperandSegments],
+                         clauses = [OpenMP_DependClause, OpenMP_DestroyClause,
+                                    OpenMP_UpdateClause]> {
+  let description =
+      [{ The `depobj` construct initializes, updates or destroys an OpenMP depend object }]#clausesDescription;
+  let arguments = !con((ins OpenMP_PointerLikeType:$obj), clausesArgs);
+  let assemblyFormat =
+      [{ `(` $obj `:` type($obj) `)`  attr-dict }]#clausesAssemblyFormat;
+  let hasVerifier = 1;
+}
+
+//===----------------------------------------------------------------------===//
 // [5.1] 2.21.2 threadprivate Directive
 //===----------------------------------------------------------------------===//
 

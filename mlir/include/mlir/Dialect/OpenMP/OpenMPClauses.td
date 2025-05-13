@@ -214,6 +214,58 @@ class OpenMP_CriticalNameClauseSkip<
 def OpenMP_CriticalNameClause : OpenMP_CriticalNameClauseSkip<>;
 
 //===----------------------------------------------------------------------===//
+// V5.2: [3.5] `destroy` clause
+//===----------------------------------------------------------------------===//
+
+class OpenMP_DestroyClauseSkip<
+    bit traits = false, bit arguments = false, bit assemblyFormat = false,
+    bit description = false, bit extraClassDeclaration = false>
+    : OpenMP_Clause<traits, arguments, assemblyFormat, description,
+                    extraClassDeclaration> {
+  let arguments = (ins Optional<OpenMP_PointerLikeType>:$destroy_var);
+
+  let optAssemblyFormat = [{
+    `destroy` `(` $destroy_var `:` type($destroy_var) `)`
+  }];
+
+  let description = [{
+    When the `destroy` clause appears on a `depobj` construct, the 
+    state of `destroy-var` is set to uninitialized. The syntax when the `destroy` clause appears on the depobj construct
+    (with the `destroy-var` argument omitted) has been deprecated.
+
+    When the `destroy` clause appears on an `interop` construct, the `interop-type` is inferred based
+    on the `interop-type` used to initialize `destroy-var`, and `destroy-var`
+    is set to the value of `omp_interop_none` after resources associated 
+    with `destroy-var` are released.
+  }];
+}
+
+def OpenMP_DestroyClause : OpenMP_DestroyClauseSkip<>;
+
+//===----------------------------------------------------------------------===//
+// V5.2: [15.9.3] `update` clause
+//===----------------------------------------------------------------------===//
+
+class OpenMP_UpdateClauseSkip<
+    bit traits = false, bit arguments = false, bit assemblyFormat = false,
+    bit description = false, bit extraClassDeclaration = false>
+    : OpenMP_Clause<traits, arguments, assemblyFormat, description,
+                    extraClassDeclaration> {
+  let arguments = (ins OptionalAttr<UpdateArrayAttr>:$dependence_type);
+
+  let optAssemblyFormat = [{
+    `update` `(` custom<UpdateVar>($dependence_type) `)`
+  }];
+
+  let description = [{
+    The `update` clause sets the dependence type of an OpenMP depend object to
+    `dependence-type`. 
+  }];
+}
+
+def OpenMP_UpdateClause : OpenMP_UpdateClauseSkip<>;
+
+//===----------------------------------------------------------------------===//
 // V5.2: [15.9.5] `depend` clause
 //===----------------------------------------------------------------------===//
 
