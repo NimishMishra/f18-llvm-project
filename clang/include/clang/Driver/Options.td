@@ -6968,7 +6968,10 @@ def fcoarray_EQ : Joined<["-"], "fcoarray=">, Group<gfortran_Group>;
 def ffpe_trap_EQ : Joined<["-"], "ffpe-trap=">, Group<gfortran_Group>;
 def ffree_line_length_VALUE : Joined<["-"], "ffree-line-length-">, Group<gfortran_Group>;
 def finit_character_EQ : Joined<["-"], "finit-character=">, Group<gfortran_Group>;
-def finit_integer_EQ : Joined<["-"], "finit-integer=">, Group<gfortran_Group>;
+def finit_integer_EQ : Joined<["-"], "finit-integer=">,
+                       Group<gfortran_Group>,
+                       Visibility<[FlangOption, FC1Option]>,
+                       HelpText<"Initialize integer type.">;
 def finit_logical_EQ : Joined<["-"], "finit-logical=">, Group<gfortran_Group>;
 def finit_real_EQ : Joined<["-"], "finit-real=">, Group<gfortran_Group>;
 def fmax_array_constructor_EQ : Joined<["-"], "fmax-array-constructor=">, Group<gfortran_Group>;
