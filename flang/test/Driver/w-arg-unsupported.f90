@@ -1,4 +1,4 @@
-! RUN: %flang -std=f2018 -Wextra -Waliasing -Wampersand -Warray-bounds -Wc-binding-type \
+! RUN: %flang -std=f2018 -Wextra -Waliasing -Wampersand -Wc-binding-type \
 ! RUN:        -Wcharacter-truncation -Wconversion -Wdo-subscript -Wfunction-elimination \
 ! RUN:        -Wimplicit-interface -Wimplicit-procedure -Wintrinsic-shadow -Wuse-without-only \
 ! RUN:        -Wintrinsics-std -Wline-truncation -Wno-align-commons -Wno-overwrite-recursive \
@@ -9,7 +9,6 @@
 ! CHECK: the warning option '-Wextra' is not supported
 ! CHECK-NEXT: the warning option '-Waliasing' is not supported
 ! CHECK-NEXT: the warning option '-Wampersand' is not supported
-! CHECK-NEXT: the warning option '-Warray-bounds' is not supported
 ! CHECK-NEXT: the warning option '-Wc-binding-type' is not supported
 ! CHECK-NEXT: the warning option '-Wcharacter-truncation' is not supported
 ! CHECK-NEXT: the warning option '-Wconversion' is not supported

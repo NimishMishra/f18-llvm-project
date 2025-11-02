@@ -7135,13 +7135,17 @@ defm second_underscore : BooleanFFlag<"second-underscore">, Group<gfortran_Group
 defm sign_zero : BooleanFFlag<"sign-zero">, Group<gfortran_Group>;
 defm whole_file : BooleanFFlag<"whole-file">, Group<gfortran_Group>;
 
+// -W <arg> options processed by the flang compiler.
+def array_bounds : Flag<["-"], "Warray-bounds">,
+                   Group<W_Group>,
+                   Visibility<[FlangOption]>;
+
 // -W <arg> options unsupported by the flang compiler
 // If any of these options are passed into flang's compiler driver,
 // a warning will be raised and the argument will be claimed
 defm : FlangIgnoredDiagOpt<"extra">;
 defm : FlangIgnoredDiagOpt<"aliasing">;
 defm : FlangIgnoredDiagOpt<"ampersand">;
-defm : FlangIgnoredDiagOpt<"array-bounds">;
 defm : FlangIgnoredDiagOpt<"c-binding-type">;
 defm : FlangIgnoredDiagOpt<"character-truncation">;
 defm : FlangIgnoredDiagOpt<"conversion">;

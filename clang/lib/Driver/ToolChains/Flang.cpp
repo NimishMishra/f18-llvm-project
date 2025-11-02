@@ -1093,6 +1093,13 @@ void Flang::ConstructJob(Compilation &C, const JobAction &JA,
     A->render(Args, CmdArgs);
   }
 
+  // Remove any ignored gfortran diagnostic options
+  if (const Arg *A = Args.getLastArg(options::OPT_array_bounds)) {
+    // -Warray-bounds functionality is by default enabled
+    // through `common::UsageWarning::Bounds`. Hence claim it
+    A->claim();
+  }
+
   // Remove any unsupported gfortran diagnostic options
   for (const Arg *A : Args.filtered(options::OPT_flang_ignored_w_Group)) {
     A->claim();

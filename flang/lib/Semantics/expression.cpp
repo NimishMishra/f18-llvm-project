@@ -341,17 +341,19 @@ static bool FoldSubscripts(semantics::SemanticsContext &context,
   return !anyPossiblyEmptyDim;
 }
 
-static void ValidateSubscriptValue(parser::ContextualMessages &messages,
-    const Symbol &symbol, ConstantSubscript val,
-    std::optional<ConstantSubscript> lb, std::optional<ConstantSubscript> ub,
-    int dim, const char *co = "") {
+static void ValidateSubscriptValue(semantics::SemanticsContext &context,
+    parser::ContextualMessages &messages, const Symbol &symbol,
+    ConstantSubscript val, std::optional<ConstantSubscript> lb,
+    std::optional<ConstantSubscript> ub, int dim, const char *co = "") {
   std::optional<parser::MessageFixedText> msg;
   std::optional<ConstantSubscript> bound;
-  if (lb && val < *lb) {
+  if (lb && val < *lb &&
+      context.languageFeatures().ShouldWarn(common::UsageWarning::Bounds)) {
     msg =
         "%ssubscript %jd is less than lower %sbound %jd for %sdimension %d of array"_err_en_US;
     bound = *lb;
-  } else if (ub && val > *ub) {
+  } else if (ub && val > *ub &&
+      context.languageFeatures().ShouldWarn(common::UsageWarning::Bounds)) {
     msg =
         "%ssubscript %jd is greater than upper %sbound %jd for %sdimension %d of array"_err_en_US;
     bound = *ub;
@@ -414,8 +416,8 @@ static void ValidateSubscripts(semantics::SemanticsContext &context,
     }
     for (int j{0}; j < vals; ++j) {
       if (val[j]) {
-        ValidateSubscriptValue(context.foldingContext().messages(), arraySymbol,
-            *val[j], dimLB, dimUB, dim);
+        ValidateSubscriptValue(context, context.foldingContext().messages(),
+            arraySymbol, *val[j], dimLB, dimUB, dim);
       }
     }
     ++dim;
@@ -439,8 +441,8 @@ static void CheckCosubscripts(
   for (auto &expr : ref.cosubscript()) {
     expr = Fold(foldingContext, std::move(expr));
     if (auto val{ToInt64(expr)}) {
-      ValidateSubscriptValue(foldingContext.messages(), coarraySymbol, *val,
-          ToInt64(GetLCOBOUND(coarraySymbol, dim)),
+      ValidateSubscriptValue(context, foldingContext.messages(), coarraySymbol,
+          *val, ToInt64(GetLCOBOUND(coarraySymbol, dim)),
           ToInt64(GetUCOBOUND(coarraySymbol, dim)), dim, "co");
     }
     ++dim;

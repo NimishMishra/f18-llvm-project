@@ -533,7 +533,9 @@ static bool CheckPointerBounds(
                 if (std::optional<std::int64_t> rhsSize{
                         evaluate::ToInt64(evaluate::Fold(
                             context, evaluate::GetSize(std::move(*shape))))}) {
-                  if (*lhsSize > *rhsSize) {
+                  if (*lhsSize > *rhsSize &&
+                      context.languageFeatures().ShouldWarn(
+                          common::UsageWarning::Bounds)) {
                     messages.Say(
                         "Pointer bounds require %d elements but target has"
                         " only %d"_err_en_US,
@@ -550,14 +552,16 @@ static bool CheckPointerBounds(
       },
       assignment.u)};
   if (numBounds > 0) {
-    if (lhs.Rank() != static_cast<int>(numBounds)) {
+    if (lhs.Rank() != static_cast<int>(numBounds) &&
+        context.languageFeatures().ShouldWarn(common::UsageWarning::Bounds)) {
       messages.Say("Pointer '%s' has rank %d but the number of bounds specified"
                    " is %d"_err_en_US,
           lhs.AsFortran(), lhs.Rank(), numBounds); // C1018
     }
   }
   if (isBoundsRemapping && rhs.Rank() != 1 &&
-      !evaluate::IsSimplyContiguous(rhs, context)) {
+      !evaluate::IsSimplyContiguous(rhs, context) &&
+      context.languageFeatures().ShouldWarn(common::UsageWarning::Bounds)) {
     messages.Say("Pointer bounds remapping target must have rank 1 or be"
                  " simply contiguous"_err_en_US); // 10.2.2.3(9)
   }
