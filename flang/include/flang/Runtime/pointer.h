@@ -120,6 +120,9 @@ bool RTDECL(PointerIsAssociated)(const Descriptor &);
 bool RTDECL(PointerIsAssociatedWith)(
     const Descriptor &, const Descriptor *target);
 
+// Checks in runtime if a NULL pointer is dereferenced
+void RTDEF(ReportPointerAssociation)(const Descriptor &pointer, const char *sourceFile, int sourceLine);
+
 // Fortran POINTERs are allocated with an extra validation word after their
 // payloads in order to detect erroneous deallocations later.
 RT_API_ATTRS void *AllocateValidatedPointerPayload(

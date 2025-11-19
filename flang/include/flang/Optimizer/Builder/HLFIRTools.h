@@ -19,6 +19,8 @@
 #include "flang/Optimizer/HLFIR/HLFIRDialect.h"
 #include "flang/Optimizer/HLFIR/HLFIROps.h"
 #include <optional>
+#include <cstdint>
+#include <type_traits>
 
 namespace fir {
 class FirOpBuilder;
@@ -36,6 +38,39 @@ class ElementalOpInterface;
 class ElementalAddrOp;
 class EvaluateInMemoryOp;
 class YieldElementOp;
+
+/// Flags set by the lowering bridge to inform operations of the 
+/// optimizer.
+enum class Flags : uint8_t {
+	None = 0,
+	CheckPtrNull = 1 << 0,
+};
+
+extern Flags flags;
+
+constexpr inline Flags operator|(Flags lhs, Flags rhs) {
+	return static_cast<Flags>(
+	      static_cast<std::underlying_type_t<Flags>>(lhs) |
+	static_cast<std::underlying_type_t<Flags>>(rhs)
+	);
+}
+
+constexpr inline Flags operator&(Flags lhs, Flags rhs) {
+	return static_cast<Flags>(
+	      static_cast<std::underlying_type_t<Flags>>(lhs) &
+	static_cast<std::underlying_type_t<Flags>>(rhs)
+	);
+}
+
+/// Sets the flag
+inline void setFlag(Flags otherFlag){
+	flags = flags | otherFlag;
+}
+
+/// Checks if a flag is active
+inline bool checkFlag(Flags otherFlag){
+	return (flags & otherFlag) == otherFlag;
+}
 
 /// Is this a Fortran variable for which the defining op carrying the Fortran
 /// attributes is visible?

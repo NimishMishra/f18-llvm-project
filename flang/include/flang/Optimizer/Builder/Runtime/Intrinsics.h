@@ -33,6 +33,8 @@ namespace runtime {
 mlir::Value genAssociated(fir::FirOpBuilder &, mlir::Location,
                           mlir::Value pointer, mlir::Value target);
 
+void checkAssociation(fir::FirOpBuilder &, mlir::Location, mlir::Value pointer);
+
 void genPointerAssociate(fir::FirOpBuilder &, mlir::Location,
                          mlir::Value pointer, mlir::Value target);
 void genPointerAssociateRemapping(fir::FirOpBuilder &, mlir::Location,

@@ -36,6 +36,7 @@
 #include "flang/Optimizer/Builder/BoxValue.h"
 #include "flang/Optimizer/Builder/CUFCommon.h"
 #include "flang/Optimizer/Builder/Character.h"
+#include "flang/Optimizer/Builder/HLFIRTools.h"
 #include "flang/Optimizer/Builder/FIRBuilder.h"
 #include "flang/Optimizer/Builder/Runtime/Assign.h"
 #include "flang/Optimizer/Builder/Runtime/Character.h"
@@ -7165,6 +7166,10 @@ Fortran::lower::LoweringBridge::LoweringBridge(
   fir::setIdent(*module, Fortran::common::getFlangFullVersion());
   if (cgOpts.RecordCommandLine)
     fir::setCommandline(*module, *cgOpts.RecordCommandLine);
+
+  // Set the optimizer flags (if any)
+  if(loweringOptions.getMchkptr())
+	  hlfir::setFlag(hlfir::Flags::CheckPtrNull);
 }
 
 Fortran::lower::LoweringBridge::~LoweringBridge() {

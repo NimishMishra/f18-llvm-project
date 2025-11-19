@@ -258,6 +258,12 @@ int RTDEF(PointerDeallocatePolymorphic)(Descriptor &pointer,
   return stat;
 }
 
+void RTDEF(ReportPointerAssociation)(const Descriptor &pointer, const char *sourceFile, int sourceLine){
+	Terminator terminator{sourceFile, sourceLine};
+	if(pointer.raw().base_addr == nullptr)
+		terminator.Crash("NULL Pointer Dereferenced");	
+}
+
 bool RTDEF(PointerIsAssociated)(const Descriptor &pointer) {
   return pointer.raw().base_addr != nullptr;
 }

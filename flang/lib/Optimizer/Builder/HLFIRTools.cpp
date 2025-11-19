@@ -15,6 +15,7 @@
 #include "flang/Optimizer/Builder/FIRBuilder.h"
 #include "flang/Optimizer/Builder/MutableBox.h"
 #include "flang/Optimizer/Builder/Runtime/Allocatable.h"
+#include "flang/Optimizer/Builder/Runtime/Intrinsics.h"
 #include "flang/Optimizer/Builder/Todo.h"
 #include "flang/Optimizer/Dialect/FIRType.h"
 #include "flang/Optimizer/HLFIR/HLFIROps.h"
@@ -24,6 +25,10 @@
 #include <mlir/Dialect/LLVMIR/LLVMAttrs.h>
 #include <mlir/Dialect/OpenMP/OpenMPDialect.h>
 #include <optional>
+
+namespace hlfir{
+    Flags flags = Flags::None;
+}
 
 // Return explicit extents. If the base is a fir.box, this won't read it to
 // return the extents and will instead return an empty vector.
@@ -844,6 +849,10 @@ hlfir::Entity hlfir::derefPointersAndAllocatables(mlir::Location loc,
                                                   Entity entity) {
   if (entity.isMutableBox()) {
     hlfir::Entity boxLoad{fir::LoadOp::create(builder, loc, entity)};
+    if(hlfir::checkFlag(hlfir::Flags::CheckPtrNull)){
+    	mlir::Value pointerBoxRef = boxLoad.getBase();
+     	fir::runtime::checkAssociation(builder, loc, pointerBoxRef);
+    }
     if (entity.isScalar()) {
       if (!entity.isPolymorphic() && !entity.hasLengthParameters())
         return hlfir::Entity{fir::BoxAddrOp::create(builder, loc, boxLoad)};

@@ -55,6 +55,19 @@ mlir::Value fir::runtime::genAssociated(fir::FirOpBuilder &builder,
   return fir::CallOp::create(builder, loc, func, args).getResult(0);
 }
 
+void fir::runtime::checkAssociation(fir::FirOpBuilder &builder, mlir::Location loc,
+		mlir::Value pointer){
+  mlir::func::FuncOp func =
+      fir::runtime::getRuntimeFunc<mkRTKey(ReportPointerAssociation)>(loc,
+                                                                   builder);
+  auto fTy = func.getFunctionType();
+  auto sourceFile = fir::factory::locationToFilename(builder, loc);
+  auto sourceLine = fir::factory::locationToLineNo(builder, loc, fTy.getInput(2));
+  llvm::SmallVector<mlir::Value> args = fir::runtime::createArguments(
+      builder, loc, func.getFunctionType(), pointer, sourceFile, sourceLine);
+  fir::CallOp::create(builder, loc, func, args);
+}
+
 mlir::Value fir::runtime::genCpuTime(fir::FirOpBuilder &builder,
                                      mlir::Location loc) {
   mlir::func::FuncOp func =

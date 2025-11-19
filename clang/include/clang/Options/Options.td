@@ -3644,6 +3644,8 @@ def fno_strict_aliasing : Flag<["-"], "fno-strict-aliasing">, Group<f_Group>,
 def fstruct_path_tbaa : Flag<["-"], "fstruct-path-tbaa">, Group<f_Group>;
 def fno_struct_path_tbaa : Flag<["-"], "fno-struct-path-tbaa">, Group<f_Group>;
 def fno_strict_enums : Flag<["-"], "fno-strict-enums">, Group<f_Group>;
+def chkptr : Flag<["-"], "Mchkptr">, Group<f_Group>, Visibility<[FlangOption, FC1Option]>, HelpText<"Emit runtime checks "
+		"for NULL pointer dereferences">;
 defm init_global_zero : BoolOptionWithoutMarshalling<"f", "init-global-zero",
   PosFlag<SetTrue, [], [FlangOption, FC1Option],
           "Zero initialize globals without default initialization (default)">,
